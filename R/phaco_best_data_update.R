@@ -1,0 +1,880 @@
+#' phaco_best_data_update : Mise à jour des données BeST et des fichiers connexes
+#'
+#' Cette fonction met à jour les données BeST Address vers la dernière version disponible sur le site de BOSA : https://opendata.bosa.be ainsi que les fichiers connexes nécessaires au géocodage.
+#'
+#' @param force Force la mise à jour même si les données sont à jour. Par défaut: FALSE.
+#' @param precision Indique la précision des coordonnées désirées. Par défaut : "m". Choix possibles : "m", "dm", "cm", "mm".
+#' @param corrections_REGEX Correction orthographique des adresses BEST. Par défaut: TRUE, car les adresses BEST ne sont pas toujours homogènes : elles contiennent des précisions entre parenthèses, des abréviations, etc. qui nuisent à la détection des rues.
+#'
+#' @import rappdirs
+#' @import readr
+#' @import readxl
+#' @import dplyr
+#' @import tidyr
+#' @import stringr
+#' @import lubridate
+#' @import sf
+#' @import sp
+#' @import spdep
+#' @importFrom stats quantile
+#'
+#' @export
+#' @examples
+#' \dontrun{
+#' phaco_best_data_update()
+#' }
+#'
+#'
+
+
+phaco_best_data_update <- function(force=FALSE,
+                                   precision="m",
+                                   corrections_REGEX=TRUE) {
+
+  # Ne pas lancer la fonction si les arguments ne sont pas corrects
+  if(length(force) > 1) {
+    cat("\n")
+    stop(paste0("\u2716 "," force doit etre un vecteur de longueur 1"))
+  }
+  if(!is.logical(force)) {
+    cat("\n")
+    stop(paste0("\u2716"," force doit etre une valeur logique"))
+  }
+  if(length(precision) > 1) {
+    cat("\n")
+    stop(paste0("\u2716 "," precision doit etre un vecteur de longueur 1"))
+  }
+  if(!is.character(precision)) {
+    cat("\n")
+    stop(paste0("\u2716"," precision doit etre un vecteur string"))
+  }
+  precision <- str_to_lower(unique(precision)) # Au cas ou l'utilisateur aurait introduit la precision en majuscule
+  if(sum(precision %in% c("m", "dm", "cm", "mm")) == 0) {
+    cat("\n")
+    stop(paste0("\u2716"," precision doit prendre une des valeurs : 'm', 'dm', 'cm', 'mm'"))
+  }
+
+  options(warn=-1) # supprime les warnings
+
+  if(precision=="m"){
+    precision_digits = 0
+    precision_label = "meter"
+  }
+  if(precision=="dm"){
+    precision_digits = 1
+    precision_label = "decimeter"
+  }
+  if(precision=="cm"){
+    precision_digits = 2
+    precision_label = "centimeter"
+  }
+  if(precision=="mm"){
+    precision_digits = 3
+    precision_label = "millimeter"
+  }
+
+
+  # 0. Mise a jour --------------------------------------------------------------------------------------------------------------------------
+
+  path_data <- gsub("\\\\", "/", paste0(user_data_dir("phacochrdev"),"/data_phacochr/")) # bricolage pour windows
+
+  # Ne pas lancer la fonction si les fichiers ne sont pas presents (cad qu'ils ne sont, en tout logique, pas installes)
+  if(sum(
+    file.exists(paste0(path_data, "STATBEL/secteurs_statistiques/sh_statbel_statistical_sectors_20220101.gpkg"),
+                paste0(path_data, "URBIS/URBIS_ADM_MD/UrbAdm_MONITORING_DISTRICT.gpkg"),
+                paste0(path_data, "STATBEL/prenoms/TA_POP_2018_M.xlsx"),
+                paste0(path_data, "STATBEL/prenoms/TA_POP_2018_F.xlsx"),
+                paste0(path_data, "STATBEL/code_postaux/Conversion Postal code_Refnis code_va01012019.xlsx")
+    )
+  ) != 5) {
+    cat("\n")
+    stop(paste0("\u2716"," les fichiers ne sont pas install","\u00e9","s : lancez phaco_setup_data()"))
+  }
+
+
+  if(sum(
+    file.exists(paste0(path_data, "CHARLEROI/Rues-Nouveaux-noms_2024-01-17.xlsx")
+    )
+  ) != 1) {
+    cat("\n")
+    stop(paste0("\u2716"," Mise ","\u00e0"," jour non compl","\u00e8","te , lancez : phaco_setup_data()"))
+  }
+
+  # Mise a jour si pas deja il y a moins de 7 jours
+  cat(paste0(" -- Mise ","\u00e0", " jour des donn","\u00e9","es BeST pour PhacochR --\n"))
+
+  cat(paste0("\n",colourise("\u2139", fg= "blue")," Pr","\u00e9","cision choisie : ", precision_label, "\n"))
+
+
+  # Premiere fois
+  if (!file.exists(paste0(path_data, "BeST/openaddress/log.csv"))){
+    log <- data.frame(update = "0001-01-01 00:00:00 UTC")
+    write_delim(log, paste0(path_data, "BeST/openaddress/log.csv"), delim = ";", progress=F)
+  }
+
+
+  log <- readr::read_delim(paste0(path_data, "BeST/openaddress/log.csv"), delim= ",", progress= F, show_col_types = FALSE)
+  log$update <- as.POSIXct(log$update)
+
+  if (max(as.Date(log$update)) + days(7) < Sys.Date() | force==TRUE) {
+
+    options(timeout=300)
+
+    download.file("https://opendata.bosa.be/download/best/postalstreets-latest.zip", paste0(path_data, "BeST/openaddress/postalstreets-latest.zip"))
+    download.file("https://opendata.bosa.be/download/best/openaddress-bevlg.zip", paste0(path_data, "BeST/openaddress/openaddress-bevlg.zip"))
+    download.file("https://opendata.bosa.be/download/best/openaddress-bebru.zip", paste0(path_data, "BeST/openaddress/openaddress-bebru.zip"))
+    download.file("https://opendata.bosa.be/download/best/openaddress-bewal.zip", paste0(path_data, "BeST/openaddress/openaddress-bewal.zip"))
+
+    # Test si les donnees ont ete telechargees
+    if(sum(
+      file.exists(paste0(path_data,"BeST/openaddress/postalstreets-latest.zip"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bevlg.zip"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bebru.zip"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bewal.zip")
+      )
+    ) != 4) {
+      cat("\n")
+      stop(paste0("\u2716"," les fichiers n'ont pas pu", " \u00ea", "tre download","\u00e9","s : relancez phaco_update() ou v","\u00e9","rifiez votre connexion"))
+    }
+
+    cat(paste0(colourise("\u2714", fg="green")," T", "\u00e9", "l", "\u00e9", "chargement des donn", "\u00e9", "es BeST"))
+
+    cat(paste0("\n","\u29D7"," D","\u00e9","compression des donn","\u00e9","es BeST"))
+
+    unzip(paste0(path_data, "BeST/openaddress/postalstreets-latest.zip"), exdir= paste0(path_data, "BeST/openaddress"))
+    file.remove(paste0(path_data, "BeST/openaddress/postalstreets-latest.zip"))
+
+    unzip(paste0(path_data, "BeST/openaddress/openaddress-bevlg.zip"), exdir= paste0(path_data, "BeST/openaddress"))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bevlg.zip"))
+
+    unzip(paste0(path_data, "BeST/openaddress/openaddress-bebru.zip"), exdir= paste0(path_data, "BeST/openaddress"))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bebru.zip"))
+
+    unzip(paste0(path_data, "BeST/openaddress/openaddress-bewal.zip"), exdir= paste0(path_data, "BeST/openaddress"))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bewal.zip"))
+
+    # Test si les donnees ont ete ecrite (plus pour la suite => si ca marche ici ca marchera apres)
+    if(sum(
+      file.exists(paste0(path_data,"BeST/openaddress/Brussels_postal_street.csv"),
+                  paste0(path_data,"BeST/openaddress/Wallonia_postal_street.csv"),
+                  paste0(path_data,"BeST/openaddress/Flanders_postal_street.csv"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bebru.csv"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bewal.csv"),
+                  paste0(path_data,"BeST/openaddress/openaddress-bevlg.csv")
+      )
+    ) != 6) {
+      cat("\n")
+      stop(paste0("\u2716"," les fichiers n'ont pas pu", " \u00ea", "tre d","\u00e9","compress","\u00e9","s : v","\u00e9","rifiez vos droits d'","\u00e9","criture sur le disque"))
+    }
+
+    log[nrow(log)+1,] <- Sys.time()
+    write_delim(log, paste0(path_data, "BeST/openaddress/log.csv"), delim = ";", progress=F)
+
+    cat(paste0("\r",colourise("\u2714", fg="green")," D","\u00e9","compression des donn","\u00e9","es BeST"))
+
+
+    # 1. Fichier rues -------------------------------------------------------------------------------------------------------------------------
+
+    cat(paste0("\n", "\u29D7", " Cr", "\u00e9", "ation du fichier des rues BeST"))
+
+    # Fonction pour extraire les rues
+    extract_street <- function(x) {
+      temp <- x %>%
+        pivot_longer(cols = c("street_fr", "street_nl", "street_de"),
+                     values_to = "street_detected",
+                     names_to = "langue_detected") %>%
+        filter(!is.na(street_detected)) %>%
+        mutate(langue_detected = recode(langue_detected,
+                                        "street_fr" = "FR",
+                                        "street_nl" = "NL",
+                                        "street_de" ="DE")) %>%
+        rename(best_street_id= street_no,
+               best_postal_code= postal_id) %>%
+        distinct(best_street_id,street_detected , .keep_all = TRUE) %>%
+        select(best_street_id, best_postal_code, street_detected, langue_detected)
+
+      return(temp)
+    }
+
+    Brussels_postal_street <- readr::read_delim(paste0(path_data, "BeST/openaddress/Brussels_postal_street.csv"), progress= F, col_types = cols(.default = col_character()))
+    Wallonia_postal_street <- readr::read_delim(paste0(path_data, "BeST/openaddress/Wallonia_postal_street.csv"), progress= F, col_types = cols(.default = col_character()))
+    Flanders_postal_street <- readr::read_delim(paste0(path_data, "BeST/openaddress/Flanders_postal_street.csv"), progress= F, col_types = cols(.default = col_character()))
+
+    belgium_street <- bind_rows(Brussels_postal_street,Wallonia_postal_street, Flanders_postal_street)
+    belgium_street <- extract_street(belgium_street)
+
+    cat(paste0("\r", colourise("\u2714", fg="green"), " Cr", "\u00e9", "ation du fichier des rues BeST"))
+
+
+    # OPTION : Correction orthographique ------------------------------------------------------------------------------------------------------
+
+    # NOTE : copie du code de phaco_geocode() rapidement modifie => A AMELIORER EN MEME TEMPS QUE LA CREATION DE LA FONCTION DE CORRECTION !
+    if (corrections_REGEX == TRUE){
+
+      cat(paste0("\n","\u29D7"," Correction orthographique des rues BeST"))
+
+      belgium_street <- belgium_street %>%
+        mutate(rue_recoded = street_detected,
+               id_regex_belgium_street = 1:n(),
+
+               rue_recoded_virgule = str_detect(rue_recoded, regex("[,]", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_virgule == TRUE,
+                                    str_replace_all(rue_recoded, regex("[,]", ignore_case = TRUE), " "),
+                                    rue_recoded),
+
+               rue_recoded_parenthese = str_detect(rue_recoded, regex("[(].+[)]", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_parenthese == TRUE,
+                                    str_replace_all(rue_recoded, regex("[(].+[)]", ignore_case = TRUE), " "),
+                                    rue_recoded),
+
+               rue_recoded = str_squish(rue_recoded), # On fait ca apres avoir efface les ponctuations, au cas il y a des doubles espaces
+
+               rue_recoded_Commandant = str_detect(rue_recoded, regex("(c(m|)dt([.]|)(\\s|))", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_Commandant == TRUE,
+                                    str_replace(rue_recoded, regex("(c(m|)dt([.]|)(\\s|))", ignore_case = TRUE), "Commandant "),
+                                    rue_recoded),
+
+               rue_recoded_Lieutenant = str_detect(rue_recoded, regex("((^lt[.](\\s|)|^lt\\s)|(?<!^)\\s+lt[.](\\s|)|(?<!^)\\s+lt\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_Lieutenant == TRUE,
+                                    str_replace(rue_recoded, regex("(^lt[.](\\s|)|^lt\\s)", ignore_case = TRUE), "Luitenant "),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_Lieutenant == TRUE,
+                                    str_replace(rue_recoded, regex("((?<!^)\\s+lt[.](\\s|)|(?<!^)\\s+lt\\s)", ignore_case = TRUE), " Lieutenant "),
+                                    rue_recoded),
+
+               rue_recoded_Saint = str_detect(rue_recoded, regex("(((\\sst[.][-]))|(\\sst(\\s|[-]|[.]))|((^st[.][-])|(^st(\\s|[-]|[.])))|(\\ss|^s)te(\\s|[-]))", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_Saint == TRUE,
+                                    str_replace(rue_recoded, regex("((\\sst[.][-]))|(\\sst(\\s|[-]|[.]))", ignore_case = TRUE), " Saint "),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_Saint == TRUE,
+                                    str_replace(rue_recoded, regex("((^st[.][-])|(^st(\\s|[-]|[.])))", ignore_case = TRUE), "Sint "),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_Saint == TRUE,
+                                    str_replace(rue_recoded, regex("(\\ss|^s)te(\\s|[-])", ignore_case = TRUE), " Sainte "),
+                                    rue_recoded),
+
+               rue_recoded = str_trim(rue_recoded, "left"), # On fait ca avant les REGEX avec ^ (ci-dessous), au cas ou les etapes precedentes auraient ajoute des blancs au debut des chaines de caracteres (notamment " Saint ", cf. precedent)
+
+               rue_recoded_chaussee = str_detect(rue_recoded, regex("(^ch(s|)(\u00e9|e)e\\s|^ch([.]|\\s))", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_chaussee == TRUE,
+                                    str_replace(rue_recoded, regex("(^ch(s|)(\u00e9|e)e\\s|^ch([.]|\\s))", ignore_case = TRUE), "Chaussee "),
+                                    rue_recoded),
+
+               rue_recoded_avenue = str_detect(rue_recoded, regex("(^av[.](\\s|)|^av(e|)\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_avenue == TRUE,
+                                    str_replace(rue_recoded, regex("(^av[.](\\s|)|^av(e|)\\s)", ignore_case = TRUE), "Avenue "),
+                                    rue_recoded),
+
+               rue_recoded_koning = str_detect(rue_recoded, regex("(^kon[.](\\s|)|^kon\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_koning == TRUE,
+                                    str_replace(rue_recoded, regex("(^kon[.](\\s|)(?=(elisabet|astrid))|^kon\\s)(?=(elisabet|astrid))", ignore_case = TRUE), "Koningin "),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_koning == TRUE,
+                                    str_replace(rue_recoded, regex("(^kon[.](\\s|)(?!(elisabet|astrid))|^kon\\s)(?!(elisabet|astrid))", ignore_case = TRUE), "Koning "),
+                                    rue_recoded),
+
+               rue_recoded_professor = str_detect(rue_recoded, regex("(^prof[.](\\s|)|^prof\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_professor == TRUE,
+                                    str_replace(rue_recoded, regex("(^prof[.](\\s|)|^prof\\s)", ignore_case = TRUE), "Professor "),
+                                    rue_recoded),
+
+               rue_recoded_square = str_detect(rue_recoded, regex("(^sq[.](\\s|)|^sq\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_square == TRUE,
+                                    str_replace(rue_recoded, regex("(^sq[.](\\s|)|^sq\\s)", ignore_case = TRUE), "Square "),
+                                    rue_recoded),
+
+               rue_recoded_steenweg = str_detect(rue_recoded, regex("stwg(\\s|[.])", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_steenweg == TRUE,
+                                    str_replace(rue_recoded, regex("stwg(\\s|[.])", ignore_case = TRUE), "steenweg"),
+                                    rue_recoded),
+
+               rue_recoded_burg = str_detect(rue_recoded, regex("(^burg[.](\\s|)|^burg\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_burg == TRUE,
+                                    str_replace(rue_recoded, regex("(^burg[.](\\s|)|^burg\\s)", ignore_case = TRUE), "Burgemeester "),
+                                    rue_recoded),
+
+               rue_recoded_dokter = str_detect(rue_recoded, regex("(^dr[.](\\s|)|^dr\\s|(?<!^)\\s+dr[.](\\s|)|(?<!^)\\s+dr\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_dokter == TRUE,
+                                    str_replace(rue_recoded, regex("(^dr[.](\\s|)|^dr\\s)", ignore_case = TRUE), "Dokter "),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_dokter == TRUE,
+                                    str_replace(rue_recoded, regex("((?<!^)\\s+dr[.](\\s|)|(?<!^)\\s+dr\\s)", ignore_case = TRUE), " Docteur "),
+                                    rue_recoded),
+
+               rue_recoded_boulevard = str_detect(rue_recoded, regex("((^b(|l)(|v)d(|[.])\\s)|(^b(|l)(|v)d[.]))", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_boulevard == TRUE,
+                                    str_replace(rue_recoded, regex("((^b(|l)(|v)d(|[.])\\s)|(^b(|l)(|v)d[.]))", ignore_case = TRUE), "Boulevard "),
+                                    rue_recoded),
+
+               rue_recoded_route = str_detect(rue_recoded, regex("^Rte\\s", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_route == TRUE,
+                                    str_replace(rue_recoded, regex("^Rte\\s", ignore_case = TRUE), "Route "),
+                                    rue_recoded),
+
+               rue_recoded_place = str_detect(rue_recoded, regex("^pl\\s", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_place == TRUE,
+                                    str_replace(rue_recoded, regex("^pl\\s", ignore_case = TRUE), "Place "),
+                                    rue_recoded),
+
+               rue_recoded_apostrophe = str_detect(rue_recoded, regex("(de\\sl\\s([']|)|rue\\sd\\s|[']\\s)", ignore_case = TRUE)),
+               rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
+                                    str_replace(rue_recoded, regex("de\\sl\\s([']|)", ignore_case = TRUE), "de l'"),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
+                                    str_replace(rue_recoded, regex("rue\\sd\\s", ignore_case = TRUE), "Rue d'"),
+                                    rue_recoded),
+               rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
+                                    str_replace(rue_recoded, regex("[']\\s", ignore_case = TRUE), "'"),
+                                    rue_recoded),
+
+               rue_recoded = str_squish(rue_recoded) # A faire a la fin : pour les doubles espaces et les espaces en trop a gauche ou a droite
+        )
+
+      belgium_street <- belgium_street %>%
+        mutate(rue_recoded_virgule = ifelse(rue_recoded_virgule == TRUE, "virgule", NA),
+               rue_recoded_parenthese = ifelse(rue_recoded_parenthese == TRUE, "parenthese", NA),
+               rue_recoded_Commandant = ifelse(rue_recoded_Commandant == TRUE, "Commandant", NA),
+               rue_recoded_Lieutenant = ifelse(rue_recoded_Lieutenant == TRUE, "Lieutenant", NA),
+               rue_recoded_Saint = ifelse(rue_recoded_Saint == TRUE, "Saint", NA),
+               rue_recoded_chaussee = ifelse(rue_recoded_chaussee == TRUE, "chaussee", NA),
+               rue_recoded_avenue = ifelse(rue_recoded_avenue == TRUE, "avenue", NA),
+               rue_recoded_koning = ifelse(rue_recoded_koning == TRUE, "koning", NA),
+               rue_recoded_professor = ifelse(rue_recoded_professor == TRUE, "professor", NA),
+               rue_recoded_square = ifelse(rue_recoded_square == TRUE, "square", NA),
+               rue_recoded_steenweg = ifelse(rue_recoded_steenweg == TRUE, "steenweg", NA),
+               rue_recoded_burg = ifelse(rue_recoded_burg == TRUE, "Burgemeester", NA),
+               rue_recoded_dokter = ifelse(rue_recoded_dokter == TRUE, "Dokter", NA),
+               rue_recoded_boulevard = ifelse(rue_recoded_boulevard == TRUE, "boulevard", NA),
+               rue_recoded_route = ifelse(rue_recoded_route == TRUE, "route", NA),
+               rue_recoded_place = ifelse(rue_recoded_place == TRUE, "place", NA),
+               rue_recoded_apostrophe = ifelse(rue_recoded_apostrophe == TRUE, "apostrophe", NA)
+        )
+
+      # On fusionne toutes les colonnes qui commencent par "rue_recoded_" en une
+      belgium_street_REGEX <- belgium_street %>%
+        select(id_regex_belgium_street, starts_with("rue_recoded_")) %>%
+        unite("recode", 2:last_col(), sep = " ; ", remove = TRUE, na.rm = TRUE)
+
+      belgium_street <- belgium_street %>%
+        select(-starts_with("rue_recoded_")) %>%
+        left_join(belgium_street_REGEX, by = "id_regex_belgium_street") %>%
+
+        # Pour revenir a la structure originale pre correction
+        select(-id_regex_belgium_street, -recode, -street_detected) %>%
+        rename("street_detected" = "rue_recoded") %>%
+        relocate(street_detected, .after = best_postal_code)
+
+      cat(paste0("\033[K","\r",colourise("\u2714", fg="green")," Correction orthographique des rues BeST", "\033[K"))
+
+    }
+
+
+    # 2. Fichier adresses ---------------------------------------------------------------------------------------------------------------------
+
+    cat(paste0("\n",  "\u29D7"," Cr", "\u00e9", "ation du fichier des adresses BeST (jointure spatiale avec les secteurs statistiques)"))
+
+    # Fonction pour selectionner les variables
+    select_id_street <- function(x) {
+      temp <- x %>%
+        rename("x_31370" = "EPSG:31370_x",
+               "y_31370" = "EPSG:31370_y") %>%
+        filter(x_31370 != "0.00000") %>%
+        mutate(house_number_sans_lettre = str_extract(house_number, regex("[0-9]+", ignore_case = TRUE))) %>%
+        select(house_number_sans_lettre, streetname_de, streetname_fr, streetname_nl, postcode, x_31370, y_31370, address_id,street_id,) %>%
+        distinct(house_number_sans_lettre, streetname_de, streetname_fr, streetname_nl, postcode,street_id,postcode, .keep_all = TRUE) %>%
+        pivot_longer(cols=  c("streetname_de", "streetname_fr", "streetname_nl"),
+                     values_to = "street_name",
+                     names_to = "langue") %>%
+        filter(!is.na(street_name)) %>%
+        rename(best_street_id=street_id,
+               best_postal_code=postcode,
+               best_address_id=address_id) %>%
+        left_join(belgium_street, by = c("best_street_id","best_postal_code")) %>%
+        select(house_number_sans_lettre, best_street_id,best_address_id, x_31370, y_31370, best_postal_code) %>%
+        distinct(house_number_sans_lettre, best_street_id, best_postal_code, .keep_all = TRUE) # J'enleve les coordonnees car 1 adresse en double avec des coordonnees differentes (?)
+      return(temp)
+    }
+
+    # Fonction pour faire la jointure spatiale avec les secteurs statistiques
+    join_ss_adress <- function(x) {
+      temp <- x %>%
+        st_as_sf(coords = c("x_31370", "y_31370"), remove = FALSE) %>%
+        st_set_crs(31370) %>%
+        st_join(BE_SS_lite_sector_arrond) %>%
+        as.data.frame() %>%
+        select(- geometry) %>%
+        return(temp)
+    }
+
+    # Charger le fichier secteurs statistiques
+    BE_SS <- st_read(paste0(path_data, "STATBEL/secteurs_statistiques/sh_statbel_statistical_sectors_20220101.gpkg"), quiet=T, crs= 31370) %>%
+      st_zm(drop = TRUE)
+
+
+    BE_SS_lite_sector_arrond <- BE_SS %>%
+      select(cd_sector, cd_dstr_refnis) %>%
+      mutate(arrond= as.numeric(substr(cd_dstr_refnis, 1, 2))) %>%
+      select(-cd_dstr_refnis)
+
+    # Bruxelles
+    openaddress_bebru <- readr::read_delim(paste0(path_data, "BeST/openaddress/openaddress-bebru.csv"), progress= F, col_types = cols(.default = col_character()))
+    openaddress_bebru <- select_id_street(openaddress_bebru)
+    openaddress_bebru <- join_ss_adress(openaddress_bebru)
+    openaddress_bebru <- openaddress_bebru %>%
+      mutate(best_address_id=paste0("bru",best_address_id))
+    # Wallonie
+    openaddress_bewal <- readr::read_delim(paste0(path_data, "BeST/openaddress/openaddress-bewal.csv"), progress= F, col_types = cols(.default = col_character()))
+    openaddress_bewal <- select_id_street(openaddress_bewal)
+    openaddress_bewal <- join_ss_adress(openaddress_bewal)
+    openaddress_bewal <- openaddress_bewal %>%
+      mutate(best_address_id=paste0("wal",best_address_id))
+    # Flandres
+    openaddress_bevlg <- readr::read_delim(paste0(path_data, "BeST/openaddress/openaddress-bevlg.csv"), progress= F, col_types = cols(.default = col_character()))
+    openaddress_bevlg <- select_id_street(openaddress_bevlg)
+    openaddress_bevlg <- join_ss_adress(openaddress_bevlg)
+    openaddress_bevlg <- openaddress_bevlg %>%
+      mutate(best_address_id=paste0("vlg",best_address_id))
+
+    # openaddress_bevlg_test<-openaddress_bevlg %>%
+    #   mutate(street_id=paste0(postcode,str_pad(street_id, width = 6, side = "left", pad = "0")))
+
+    # Belgique
+    openaddress_be <- bind_rows(openaddress_bebru, openaddress_bewal, openaddress_bevlg)
+
+    cat(paste0("\r",  colourise("\u2714", fg="green")," Cr", "\u00e9", "ation du fichier des adresses BeST (jointure spatiale avec les secteurs statistiques)"))
+
+
+    # 3. Belgium street  ----------------------------------------------------------------------------------
+
+    cat(paste0("\n", "\u29D7", " Cr", "\u00e9", "ation des noms propres abr", "\u00e9", "g", "\u00e9", "s pour le fichier des rues BeST"))
+
+    # Fonction utilisee ci-dessous => https://www.r-bloggers.com/2018/07/the-notin-operator/
+    `%ni%` <- Negate(`%in%`)
+
+    ## 3.1. Noms abrégés ----------------------------------------------------------------------------------
+    # Creer les rues avec abreviations de noms
+
+    TA_POP_2018_M <- read_excel(paste0(path_data, "STATBEL/prenoms/TA_POP_2018_M.xlsx"), progress= F)
+    TA_POP_2018_F <-read_excel(paste0(path_data, "STATBEL/prenoms/TA_POP_2018_F.xlsx"),  progress= F)
+
+    prenoms <- bind_rows(TA_POP_2018_M, TA_POP_2018_F) %>%
+      select(TX_FST_NAME, MS_FREQUENCY) %>%
+      group_by(TX_FST_NAME) %>%
+      summarise(MS_FREQUENCY = sum(MS_FREQUENCY)) %>%
+      filter(MS_FREQUENCY > 500) %>% # On ne prend que les noms dont la frequence est superieure a 500 en Belgique
+      filter(TX_FST_NAME %ni% c("Prince", "Reine")) %>%  # On evite de creer des abreviations pour les rues avec noms de Reine / Prince (on abrege pas communement ces noms)
+      mutate(abv = str_remove_all(str_replace(TX_FST_NAME, "-", " "), "(?<!^|[:space:])."))
+
+    # On remplace les noms propres par leur abreviations (y compris noms composes)
+    belgium_street_abv <- belgium_street %>%
+      mutate(
+        detect = str_detect(
+          street_detected,
+          str_c(
+            "\\b(?<!\\-)(",
+            str_c(prenoms$TX_FST_NAME,
+                  collapse = "|"
+            ),
+            ")\\b(?!\\-)"
+          )
+        ),
+        street_detected_abv = str_replace(
+          street_detected,
+          str_c(
+            "\\b(?<!\\-)(",
+            str_c(prenoms$TX_FST_NAME,
+                  collapse = "|"
+            ),
+            ")\\b(?!\\-)"
+          ),
+          str_remove_all(str_replace(str_extract(
+            street_detected,
+            str_c(
+              "\\b(?<!\\-)(",
+              str_c(prenoms$TX_FST_NAME,
+                    collapse = "|"
+              ),
+              ")\\b(?!\\-)"
+            )
+          ), "-", " "), "(?<!^|[:space:]).")
+        )
+      ) %>%
+      filter(detect == TRUE) %>%
+      select( best_street_id,best_postal_code,langue_detected,"street_detected_Origin" = "street_detected", "street_detected" = "street_detected_abv", nom_propre_abv = detect) %>%
+      mutate(nom_propre_abv = 1)
+
+    # On supprime qques abreviations fausses
+    belgium_street_abv <- belgium_street_abv %>%
+      mutate(Count = str_length(street_detected),
+             Saint = str_detect(street_detected, regex("(Sint-[a-z])|(Saint(|e)-[a-z])", ignore_case = TRUE)),
+             Last = str_detect(street_detected, regex("(\\s|'|-)[A-Z]$", ignore_case = TRUE)),
+             Last_double = str_detect(street_detected, regex("((\\s|'|-)[A-Z][A-Z]$)", ignore_case = TRUE)),
+             King = str_detect(street_detected_Origin, regex("1er$|II|Roi\\s|Koning(|in)\\s", ignore_case = TRUE))
+      ) %>%
+      filter(Last == FALSE) %>%
+      filter(Last_double == FALSE) %>%
+      filter(Count >= 10 & Count <= 25) %>%
+      filter(Saint == FALSE) %>%
+      filter(King == FALSE) %>%
+      select(best_street_id, best_postal_code, street_detected, langue_detected, nom_propre_abv)
+
+
+    belgium_street_abv <- belgium_street %>%
+      bind_rows(belgium_street_abv)
+
+
+    cat(paste0("\r",  colourise("\u2714", fg="green"), " Cr", "\u00e9", "ation des noms propres abr", "\u00e9", "g", "\u00e9", "s pour le fichier des rues BeST"))
+
+    ## 3.2. Charleroi ----------------------------------------------------------------------------------
+    # Ajout des rues de Charleroi, certaines rues ont mal écrites dans le fichier de la commune, on les corrige
+    cat(paste0("\n", "\u29D7", " Ajout des anciens noms de rue pour la commune de Charleroi"))
+
+    rue_charleroi <- read_excel(paste0(path_data,"CHARLEROI/Rues-Nouveaux-noms_2024-01-17.xlsx")) %>%
+      mutate(
+        section = substr(section, 1, 4),
+        nouveau_nom = str_replace(nouveau_nom, "' ", "'"),
+        nouveau_nom = str_replace(nouveau_nom, "  ", " "),
+        nouveau_nom = str_replace(nouveau_nom, "\u2019", "'"),# apostrophe courbe ’ différent de  '
+        nouveau_nom = str_replace(nouveau_nom, "rue ", "Rue "),
+        nouveau_nom = str_replace(nouveau_nom, paste0("Ch", "\u00e8", "vres"), paste0("Ch", "\u00ea", "vres")), # "Chèvres" en "Chêvres"
+        nouveau_nom = str_replace(nouveau_nom, paste0("Br", "\u00e8", "y", "\u00f6", "d"), paste0("Br", "\u00e8", "y", "\u00f4", "d")), # "Brèyöd" en "Brèyôd"
+        nouveau_nom = str_replace(nouveau_nom, paste0("Tr", "\u00ef"), paste0("Tr", "\u00ee")), # "Trï" en "Trî"
+        nouveau_nom = str_replace(nouveau_nom, "Helleputte", "Hellepute")
+      )
+
+
+    rue_charleroi_abv <- rue_charleroi %>%
+      mutate(
+        detect = str_detect(
+          ancienne_denomination,
+          str_c(
+            "\\b(?<!\\-)(",
+            str_c(prenoms$TX_FST_NAME,
+                  collapse = "|"
+            ),
+            ")\\b(?!\\-)"
+          )
+        ),
+        ancienne_denomination_abv = str_replace(
+          ancienne_denomination,
+          str_c(
+            "\\b(?<!\\-)(",
+            str_c(prenoms$TX_FST_NAME,
+                  collapse = "|"
+            ),
+            ")\\b(?!\\-)"
+          ),
+          str_remove_all(str_replace(str_extract(
+            ancienne_denomination,
+            str_c(
+              "\\b(?<!\\-)(",
+              str_c(prenoms$TX_FST_NAME,
+                    collapse = "|"
+              ),
+              ")\\b(?!\\-)"
+            )
+          ), "-", " "), "(?<!^|[:space:]).")
+        )
+      ) %>%
+      mutate(detect= ifelse(ancienne_denomination_abv=="Rue L",FALSE, detect), # mauvaises abrv
+             detect= ifelse(ancienne_denomination_abv=="Place C II",FALSE, detect),
+             detect= ifelse(ancienne_denomination_abv=="Rue L",FALSE, detect),
+             detect= ifelse(ancienne_denomination_abv=="Rue de l'A",FALSE, detect),
+             detect= ifelse(ancienne_denomination_abv=="Rue de F",FALSE, detect),
+             detect= ifelse(ancienne_denomination_abv=="Place A",FALSE, detect)) %>%
+      filter(detect==TRUE) %>%
+      mutate(ancienne_denomination_abv= str_replace(ancienne_denomination_abv,"A Ier", "Albert I"),
+             ancienne_denomination_abv= str_replace(ancienne_denomination_abv,"Rue Reine A", "R Astrid"),
+             ancienne_denomination_abv= str_replace(ancienne_denomination_abv,"Saint J", "St Jean"))
+
+
+
+    rue_charleroi_bis<-belgium_street_abv %>%
+      mutate( street_detected=str_replace(street_detected, "\u2019","'")) %>% # apostrophe courbe ’ différent de  '
+      inner_join(rue_charleroi, by=c("best_postal_code"="section",
+                                     "street_detected"="nouveau_nom")) %>%
+      mutate(street_detected=ancienne_denomination,
+             ancien_nom_rue=1) %>%
+      relocate(ancien_nom_rue, .after = nom_propre_abv) %>%
+      select(-ancienne_denomination)
+
+    rue_charleroi_abv_bis<- rue_charleroi_bis %>%
+      full_join(rue_charleroi_abv, by=c("best_postal_code"= "section",
+                                        "street_detected"="ancienne_denomination")) %>%
+      select(-nouveau_nom, -detect)%>%
+      pivot_longer(cols=c("street_detected","ancienne_denomination_abv")) %>%
+      mutate(nom_propre_abv=ifelse(name=="street_detected", NA, 1)) %>%
+      filter(!is.na(value)) %>%
+      rename(street_detected=value) %>%
+      select(-name)
+
+
+    belgium_street_abv<-bind_rows(belgium_street_abv , rue_charleroi_abv_bis)
+
+    cat(paste0("\r", colourise("\u2714", fg="green"), " Ajout des anciens noms de rue pour la commune de Charleroi"))
+
+    ## 3.3. Millieux de la rue  ----------------------------------------------------------------------------------
+    # Assigner a chaque rue par code postal les coordonnees du numero du milieu
+    cat(paste0("\n", "\u29D7", " Recherche du num", "\u00e9", "ro au milieu de la rue par code postal"))
+
+    num_mid <- belgium_street_abv %>%
+      inner_join(openaddress_be, by = c("best_street_id","best_postal_code")) %>% # certaines rues n'ont pas de numero, on les ecartes
+      mutate(house_number_sans_lettre = as.numeric(house_number_sans_lettre)) %>%
+      group_by(best_street_id, best_postal_code) %>% # par rue et code postal
+      filter(house_number_sans_lettre == as.numeric(quantile(house_number_sans_lettre, p = 0.5, type = 3, na.rm=T))) %>% # quantile parce que median() prend la valeur du milieu quand paire, type 3 arrondi vers le bas
+      rename(mid_num = house_number_sans_lettre,
+             mid_x_31370 = x_31370,
+             mid_y_31370= y_31370,
+             mid_cd_sector= cd_sector,
+             mid_arrond= arrond) %>%
+      select(best_street_id, best_postal_code, mid_num, mid_x_31370, mid_y_31370, mid_cd_sector) %>%
+      unique()
+
+
+    belgium_street_abv<-belgium_street_abv %>%
+      left_join(num_mid, by=c("best_street_id","best_postal_code")) %>%
+      mutate(mid_x_31370 = round(as.numeric(mid_x_31370), precision_digits),
+             mid_y_31370 = round(as.numeric(mid_y_31370), precision_digits))
+
+    cat(paste0("\r", colourise("\u2714", fg="green"), " Recherche du num", "\u00e9", "ro au milieu de la rue par code postal"))
+
+
+
+
+
+    ## 3.4. Ajout des rues sans les " de " ----------------------------------------------------------------------------------
+    # A poursuivre
+    # test<- belgium_street_abv_bis %>%
+    #   mutate(detect = str_detect(street_detected, " de ")) %>%
+    #   filter(detect==TRUE)
+
+
+    ## 3.5. Export ----------------------------------------------------------------------------------
+    #write_csv2(belgium_street, paste0(path_data, "BeST/PREPROCESSED/belgium_street_PREPROCESSED.csv"))
+    write_delim(belgium_street_abv, paste0(path_data, "BeST/PREPROCESSED/belgium_street_abv_PREPROCESSED.csv"), delim = ";", progress=F)
+
+
+
+    # 4. Table codes postaux > arrondissements ------------------------------------------------------------------------------------------------
+
+    # On cree la table de conversion codes postaux > arrondissements
+    cat(paste0("\n", "\u29D7"," Cr", "\u00e9", "ation de la table de conversion 'codes postaux - arrondissements' (Statbel)"))
+
+    code_postal_INS <- read_excel(paste0(path_data, "STATBEL/code_postaux/Conversion Postal code_Refnis code_va01012019.xlsx"), progress= F) %>%
+      rename("code_postal" = "Postal code")
+
+    BE_SS_lite_comm_arrond_rgn <- BE_SS %>%
+      as.data.frame() %>%
+      select(cd_munty_refnis, cd_dstr_refnis, tx_rgn_descr_fr) %>%
+      mutate(arrond = as.numeric(substr(cd_dstr_refnis, 1, 2))) %>%
+      select(-cd_dstr_refnis)
+
+    table_postal_arrond <- code_postal_INS %>%
+      left_join(BE_SS_lite_comm_arrond_rgn, by = c("Refnis code" = "cd_munty_refnis")) %>%
+      select("postcode" = "code_postal", arrond, "Region" = "tx_rgn_descr_fr") %>%
+      distinct()
+
+    table_postal_arrond$Region[table_postal_arrond$Region == paste0("R", "\u00e9", "gion de Bruxelles-Capitale")] <- "Bruxelles"
+    table_postal_arrond$Region[table_postal_arrond$Region == paste0("R", "\u00e9", "gion flamande")] <- "Flandre"
+    table_postal_arrond$Region[table_postal_arrond$Region == paste0("R", "\u00e9", "gion wallonne")] <- "Wallonie"
+
+
+    write_delim(table_postal_arrond, paste0(path_data, "BeST/PREPROCESSED/table_postal_arrond.csv"), delim = ";", progress=F)
+
+    cat(paste0("\r", colourise("\u2714", fg="green")," Cr", "\u00e9", "ation de la table de conversion 'codes postaux - arrondissements' (Statbel)"))
+
+
+    # 5. Table de conversion code postal > communes (nom + INS recode) ------------------------------------------------------------------------
+
+    # On cree une table de toutes les combinaisons CODE_POSTAL-COMMUNE et COMMUNE-CODE_POSTAL
+    cat(paste0("\n", "\u29D7"," Cr", "\u00e9", "ation de la table 'codes postaux - nom des communes' (Statbel)"))
+
+    table_postal_com_name <- code_postal_INS %>%
+      add_row(code_postal = "1020", # On ajoute qques communes a la main dont l'orthographe a ete detectee dans une base de donnee (pour BXL uniquement)
+              Gemeentenaam = "Laken",
+              `Nom commune` = "Laeken") %>%
+      add_row(code_postal = "1120",
+              `Nom commune` = "Neder-Over-Heembeek",
+              Gemeentenaam = "Neder-Over-Heembeek") %>%
+      add_row(code_postal = "1080",
+              Gemeentenaam = "Molenbeek",
+              `Nom commune` = "Molenbeek") %>%
+      add_row(code_postal = "1130",
+              Gemeentenaam = "Haren",
+              `Nom commune` = "Haren") %>%
+      mutate(cp_n_fr = paste(code_postal, `Nom commune`),
+             cp_n_nl = paste(code_postal, Gemeentenaam),
+             n_cp_fr = paste(`Nom commune`, code_postal),
+             n_cp_nl = paste(Gemeentenaam, code_postal)) %>%
+      select(cp_n_fr, cp_n_nl, n_cp_fr, n_cp_nl) %>%
+      pivot_longer(cols = c("cp_n_fr", "cp_n_nl", "n_cp_fr", "n_cp_nl"),
+                   values_to = "CP_NAME") %>%
+      select(-name)
+
+    # Ici partie pour ajouter "tous les codes postaux X Bruxelles"
+    table_postal_com_name_BXL <- code_postal_INS %>%
+      filter(substr(`Refnis code`, 1, 2) == 21) %>%
+      mutate(Gemeentenaam = "Brussel",
+             `Nom commune` = "Bruxelles",
+             name_eng = "Brussels",
+             name_abv = "BXL",
+             cp_n_fr = paste(code_postal, `Nom commune`),
+             cp_n_nl = paste(code_postal, Gemeentenaam),
+             cp_n_eng = paste(code_postal, name_eng),
+             cp_n_abv = paste(code_postal, name_abv),
+             n_cp_fr = paste(`Nom commune`, code_postal),
+             n_cp_nl = paste(Gemeentenaam, code_postal),
+             n_cp_eng = paste(name_eng, code_postal),
+             n_cp_abv = paste(name_abv, code_postal)) %>%
+      select(cp_n_fr, cp_n_nl, cp_n_eng, cp_n_abv, n_cp_fr, n_cp_nl, n_cp_eng, n_cp_abv) %>%
+      pivot_longer(cols = c("cp_n_fr", "cp_n_nl", "cp_n_eng", "cp_n_abv", "n_cp_fr", "n_cp_nl", "n_cp_eng", "n_cp_abv"),
+                   values_to = "CP_NAME") %>%
+      select(-name)
+
+    table_postal_com_name <- table_postal_com_name %>%
+      bind_rows(table_postal_com_name_BXL) %>%
+      distinct() %>%
+      mutate(CP_NAME = str_replace_all(CP_NAME, "[-]", "[- ]"), # Ici je remplace par des expressions REGEX pour rendre insensible aux caracteres speciaux
+             CP_NAME = str_replace_all(CP_NAME, "[a\u00e0\u00e2]", "[a\u00e0\u00e2]"),
+             CP_NAME = str_replace_all(CP_NAME, "[e\u00e8\u00e9\u00ea\u00eb]", "[e\u00e8\u00e9\u00ea\u00eb]"),
+             CP_NAME = str_replace_all(CP_NAME, "[u\u00fb\u00fc]", "[u\u00fb\u00fc]"),
+             CP_NAME = str_replace_all(CP_NAME, "[c\u00e7]", "[c\u00e7]")
+      )
+
+
+    write_delim(table_postal_com_name, paste0(path_data, "BeST/PREPROCESSED/table_postal_com_name.csv"), delim = ";", progress=F)
+
+    cat(paste0("\r", colourise("\u2714", fg="green")," Cr", "\u00e9", "ation de la table 'codes postaux - nom des communes' (Statbel)"))
+
+
+    # On recode les codes INS pour possibilite de l'elargissement aux communes adjacentes (voir phaco_geocode() )
+    cat(paste0("\n", "\u29D7"," Cr", "\u00e9", "ation de la table de conversion 'codes postaux - codes INS recod", "\u00e9", "es' (Statbel)"))
+
+    table_INS_recod_code_postal <- code_postal_INS %>%
+      select(code_postal, "Refnis code") %>%
+      mutate(`Refnis code` = case_when(`Refnis code` == "21004" | `Refnis code` == "21005" | `Refnis code` == "21009" ~ "21004-21005-21009",
+                                       `Refnis code` == "23088" | `Refnis code` == "23096" ~ "23088-23096",
+                                       TRUE ~ `Refnis code`)) %>%
+      distinct()
+
+
+    write_delim(table_INS_recod_code_postal, paste0(path_data, "BeST/PREPROCESSED/table_INS_recod_code_postal.csv"), delim = ";", progress=F)
+
+    cat(paste0("\r", colourise("\u2714", fg="green")," Cr", "\u00e9", "ation de la table de conversion 'codes postaux - codes INS recod", "\u00e9", "es' (Statbel)"))
+
+
+    # 6. Export openaddress par arrondissement ------------------------------------------------------------------------------------------------
+
+    cat(paste0("\n", "\u29D7"," Export des fichiers BeST par arrondissement"))
+
+    openaddress_be <- rename(openaddress_be, "arrond2" = "arrond") %>%
+      mutate(x_31370 = round(as.numeric(x_31370), precision_digits),
+             y_31370 = round(as.numeric(y_31370), precision_digits)) %>%
+      left_join(select(table_postal_arrond, postcode, arrond), by = c("best_postal_code"="postcode"))
+
+    # Verif = pas toujours convergent ! => On penche plutot pour des erreurs des coordonnees que du code postal
+    # => On garde donc les arrond issus de la jointure CODE POSTAL > ARROND au lieu de partir des arrond definis par localisation geo
+    # table(openaddress_be$arrond, openaddress_be$arrond2)
+
+    openaddress_be <- openaddress_be %>%
+      select(-arrond2)
+
+    filter_arrondissements <- unique(openaddress_be$arrond[!is.na(openaddress_be$arrond)])
+
+    for (i in filter_arrondissements) {
+      temp <- openaddress_be %>%
+        filter(arrond == i) %>%
+        select( -arrond)
+      write_delim(temp, paste0(paste0(path_data, "BeST/PREPROCESSED/data_arrond_PREPROCESSED_"),  i, ".csv"), delim = ";", na = "", progress=F)
+    }
+
+    cat(paste0("\r", colourise("\u2714", fg="green")," Export des fichiers BeST par arrondissement"))
+
+
+    # 7. Table secteurs - quartiers - communes -  arrond - region -----------------------------------------------------------------------------
+
+    # On cree une table avec les infos administratives pour jointure a la fin de phaco_geocode()
+    cat(paste0("\n", "\u29D7", " Collecte des informations par secteur statistique (jointure secteurs statistiques Statbel - quartiers Urbis)"))
+
+    # Quartiers du monitoring
+    BXL_QUARTIERS_sf <- st_read(paste0(path_data, "URBIS/URBIS_ADM_MD/UrbAdm_MONITORING_DISTRICT.gpkg"), quiet=T,crs=31370)
+    # jointure spatiale avec le centroid des secteurs statistiques
+    BXL_QUARTIERS <- st_join(BXL_QUARTIERS_sf, st_point_on_surface(BE_SS)) %>% #st_point_on_surface plutot que st_centroid parce que certains centroides sont en dehors de leur polygone
+      as.data.frame() %>%
+      select(cd_sector, MDRC, NAME_FRE, NAME_DUT)
+
+    # On calcule les centroides des secteurs stats (en cas d'anonymisation des donnees)
+    BE_SS_coord <- BE_SS %>%
+      st_point_on_surface() %>%
+      dplyr::mutate(cd_sector_x_31370 = sf::st_coordinates(.)[,1],
+                    cd_sector_y_31370 = sf::st_coordinates(.)[,2],
+                    cd_sector_x_31370 = str_replace(cd_sector_x_31370, ",", "."),
+                    cd_sector_y_31370 = str_replace(cd_sector_y_31370, ",", "."),
+                    cd_sector_x_31370 = round(as.numeric(cd_sector_x_31370), precision_digits),
+                    cd_sector_y_31370 = round(as.numeric(cd_sector_y_31370), precision_digits)) %>%
+      as.data.frame() %>%
+      select(cd_sector, cd_sector_x_31370, cd_sector_y_31370)
+
+    table_secteurs_prov_commune_quartier <- BE_SS %>%
+      left_join(BXL_QUARTIERS, by="cd_sector") %>%
+      left_join(BE_SS_coord, by="cd_sector") %>%
+      as.data.frame() %>%
+      select(-tx_sector_descr_de, -tx_munty_descr_de, -tx_adm_dstr_descr_de,
+             -tx_rgn_descr_de, -cd_country,- cd_nuts_lvl1, -cd_nuts_lvl2, -cd_nuts_lvl3,
+             -ms_area_ha, -ms_perimeter_m, -dt_situation, -geom, -tx_prov_descr_de) # NOTE : dans BE_SS version gpkg, le champ geometrie = "geom" et non "geometry" => PKOI ?
+
+
+    write_delim(table_secteurs_prov_commune_quartier, paste0(path_data, "STATBEL/secteurs_statistiques/table_secteurs_prov_commune_quartier.csv"), delim = ";", na = "", progress=F)
+
+    cat(paste0("\r", colourise("\u2714", fg="green"), " Collecte des informations par secteur statistique (jointure secteurs statistiques Statbel - quartiers Urbis)"))
+
+
+    # 8. Liste des communes adjacentes par commune --------------------------------------------------------------------------------------------
+
+    # On cree une liste des communes adjacentes par commune (via INS recode)
+    cat(paste0("\n", "\u29D7", " Cr", "\u00e9", "ation de la table des communes adjacentes (Statbel)"))
+
+    # D'abord un recodage car codes postaux et INS n'ont pas de relation bi-univoque : https://statbel.fgov.be/fr/propos-de-statbel/methodologie/classifications/geographie
+    BE_communes <- BE_SS %>%
+      mutate(cd_munty_refnis = case_when(cd_munty_refnis == "21004" | cd_munty_refnis == "21005" | cd_munty_refnis == "21009" ~ "21004-21005-21009",
+                                         cd_munty_refnis == "23088" | cd_munty_refnis == "23096" ~ "23088-23096",
+                                         TRUE ~ cd_munty_refnis)) %>%
+      group_by(cd_munty_refnis) %>%
+      summarize(geom = st_union(geom))
+
+    nb <- poly2nb(BE_communes)
+    mat <- nb2mat(nb, style="B")
+    colnames(mat) <- BE_communes$cd_munty_refnis
+    mat <- mat %>%
+      as.data.frame() %>%
+      mutate(cd_munty_refnis= BE_communes$cd_munty_refnis) %>%
+      pivot_longer(cols= 1:578, names_to= "cd_munty_refnis_voisin", values_to= "voisin") %>%
+      filter(voisin==1) %>%
+      select(-voisin)
+
+
+    write_delim(mat, paste0(path_data, "BeST/PREPROCESSED/table_commune_adjacentes.csv"), delim = ";", progress=F)
+
+    cat(paste0("\r", colourise("\u2714", fg="green"), " Cr", "\u00e9", "ation de la table des communes adjacentes (Statbel)"))
+
+
+    # 9. Delete des fichiers openaddress originaux --------------------------------------------------------------------------------------------
+
+    cat(paste0("\n", colourise("\u2714", fg="green")," Supression des fichiers initiaux BeST sur le disque dur"))
+
+    file.remove(c(paste0(path_data, "BeST/openaddress/Brussels_postal_street.csv"),
+                  paste0(path_data, "BeST/openaddress/Flanders_postal_street.csv"),
+                  paste0(path_data, "BeST/openaddress/Wallonia_postal_street.csv")))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bevlg.csv"))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bebru.csv"))
+    file.remove(paste0(path_data, "BeST/openaddress/openaddress-bewal.csv"))
+
+    options(timeout=60)
+    cat(paste0("\n", colourise("\u2714", fg="green")," Les donn", "\u00e9", "es BeST sont"," \u00e0"," jour."))
+
+
+  } else {
+    cat(paste0("\n", colourise("\u2714", fg="green")," Les fichiers openaddress ont moins d'une semaine : mise", " \u00e0 ", "jour non n", "\u00e9", "cessaire"))
+  }
+}
+

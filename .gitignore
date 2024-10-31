@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+inst/doc
+DESCRIPTION
+R/mise_a_jour_package.R

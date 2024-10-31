@@ -1,0 +1,59 @@
+url: https://phacochr.github.io/phacochrdev/
+template:
+  bootstrap: 5
+
+reference:
+- title: "Fonction principale"
+  desc: ""
+  contents:
+  - phaco_geocode
+- title: "Installation et mise à jour"
+  desc: ""
+  contents:
+  - phaco_setup_data
+  - phaco_best_data_update
+- title: "Cartographie des résultats"
+  desc: ""
+  contents:
+  - phaco_map_s
+- title: "Données"
+  desc: ""
+  contents:
+  - snacks
+  - phaco_data
+
+navbar:
+  left:
+  - icon: fa-home
+    href: index.html
+  - text: Reference
+    href: reference/index.html
+  - text: Articles
+    menu:
+    - text: Logique du géocodage
+      href: articles/geocoding_logic.html
+    - text: Structure et mise à jour des données BeST
+      href: articles/data_phacochr.html
+    - text: Performances et fiabilité
+      href: articles/performances.html
+    - text: Géocodage anonymisé
+      href: articles/anonymous_geocoding.html
+  - text: News
+    href: news/index.html
+  - text: Géocoder en ligne
+    href: articles/shiny_app.html
+  right:
+    - icon: fa-github fa-lg
+      text: "github"
+      href: https://github.com/phacochr/
+
+footer:
+  structure:
+    left: developed_by
+    right:
+
+home:
+  sidebar:
+    structure: [dev,authors, license, citation, toc]
+
+
