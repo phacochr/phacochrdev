@@ -1,0 +1,21 @@
+Package: phacochrdev
+Title: Phacochr version de développement
+Version: 0.10.0.0
+Authors@R: 
+    c(person("Joel", "Gires", email = "jgires@ccc.brussels", role = c("aut", "cre")),
+    person("Hugo", "Perilleux", email = "hugo.perilleux@ulb.be", role = "aut"))
+Description: From a list of addresses, it allows the finding of the X-Y coordinates necessary for any spatial analysis, at a level of precision of the building. - A partir d’une liste d’adresses, il permet de retrouver les coordonnées X-Y nécessaires à toute analyse spatiale, à un niveau de précision du bâtiment.
+URL: https://phacochr.github.io/phacochr-dev/, https://github.com/phacochr-dev
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports: dplyr, doParallel, foreach, fuzzyjoin, lubridate, purrr, stats,
+    readr, readxl, stringdist, sf, sp, spdep, knitr, 
+    stringr, tidyr, rappdirs, utils, mapsf, scales
+Language: fr
+LazyData: true
+Depends: R (>= 3.5.0)
+VignetteBuilder: knitr
+Suggests: 
+    rmarkdown
