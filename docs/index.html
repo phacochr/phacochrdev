@@ -38,7 +38,7 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="active nav-item"><a class="nav-link" href="index.html"><span class="fa fa-home"></span></a></li>
+<li class="active nav-item"><a class="nav-link" href="index.html" aria-label="Retour à l'accueil"><span class="fa fa-home"></span></a></li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
@@ -70,7 +70,32 @@
 
 <p><code>phacochr</code> est un géocodeur pour la Belgique sous forme de package R. Son principe est de produire, à partir d’une base de données d’adresses, une série d’informations nécessaires pour l’analyse spatiale : les coordonnées X-Y mais également d’autres informations utiles comme le secteur statistique ou le quartier du monitoring pour Bruxelles. Le niveau de précision du géocodage est celui du bâtiment.</p>
 <div style="border:0px; background-color:#f8f5e4; padding: 10px; margin-bottom: 10px">
-<p><strong>Ceci est la version de développement de phacochr.</strong> La mise-à-jour de <code>phacochr</code> vers la <a href="https://phacochr.github.io/phacochrdev/news/index.html">version 0.10.0.0.</a> nécessite de réimporter les données avant de pouvoir mettre les données à jours. Pour vous assurez que tout fonctionne réinstaller phacochr depuis le début.</p>
+<p>
+<strong>Ceci est la version de développement de phacochr.</strong>
+</p>
+<p>
+La <a href="https://phacochr.github.io/phacochrdev/news/index.html">version 0.10.0.0</a> qui nécessite une réinstallation complète présente des changements substantiels:
+</p>
+<ul>
+<li>
+récupération des id issus des données BeST,
+</li>
+<li>
+intégration des anciens noms de rue de Charleroi,
+</li>
+<li>
+résolution d’un problème d’attribution de deux secteurs statistiques à des mauvais quartiers,
+</li>
+<li>
+une nouvelle fonction pour charger les données et
+</li>
+<li>
+ajout d’un paramètre pour l’élargissement aux communes adjacentes.
+</li>
+</ul>
+<p>
+La <a href="https://phacochr.github.io/phacochr/" class="external-link">version 0.9.1.14</a> reste néanmoins disponible.
+</p>
 </div>
 <p>Le package est très rapide pour géocoder de longues listes (la vitesse d’exécution se situe entre 0,4 et 0,8 secondes pour 100 adresses sur un ordinateur de puissance moyenne) et le taux de succès pour le géocodage est élevé (médiane de 97%). Voir la page <a href="https://phacochr.github.io/phacochrdev/articles/performances.html">Performances et fiabilité</a> pour le détail des performances.</p>
 <p>Le géocodage est réalisé entièrement en local, permettant une confidentialité maximale dans le cas d’adresses qui ne peuvent pas être envoyées sur des serveurs externes (permettant notamment un <a href="https://phacochr.github.io/phacochrdev/articles/anonymous_geocoding.html">Géocodage anonymisé</a>). <code>phacochr</code> constitue donc une alternative très performante face aux solutions existantes tout en reposant entièrement sur des données publiques et des procédures libres.</p>
@@ -90,7 +115,7 @@
 <p>Il est indispensable lors de la première utilisation d’installer les données nécessaires à son utilisation via la fonction <code><a href="reference/phaco_setup_data.html">phaco_setup_data()</a></code>. Ces fichiers (+/- 336Mo) sont téléchargés et stockés de manière permanente dans un répertoire de travail sur l’ordinateur (dépendant du système d’exploitation et renseigné par la fonction lors de l’installation).</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Charger phacochr</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://phacochr.github.io/phacochr-dev/" class="external-link">phacochrdev</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://phacochr.github.io/phacochrdev/">phacochrdev</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Installer les données nécessaires à phacochr</span></span>
 <span><span class="fu"><a href="reference/phaco_setup_data.html">phaco_setup_data</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>

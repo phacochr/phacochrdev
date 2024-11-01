@@ -16,12 +16,37 @@ niveau de précision du géocodage est celui du bâtiment.
 
 <div style="border:0px; background-color:#f8f5e4; padding: 10px; margin-bottom: 10px">
 
-**Ceci est la version de développement de phacochr.** La mise-à-jour de
-`phacochr` vers la [version
-0.10.0.0.](https://phacochr.github.io/phacochrdev/news/index.html)
-nécessite de réimporter les données avant de pouvoir mettre les données
-à jours. Pour vous assurez que tout fonctionne réinstaller phacochr
-depuis le début.
+<p>
+<strong>Ceci est la version de développement de phacochr.</strong>
+</p>
+<p>
+La
+<a href="https://phacochr.github.io/phacochrdev/news/index.html">version
+0.10.0.0</a> qui nécessite une réinstallation complète présente des
+changements substantiels:
+</p>
+<ul>
+<li>
+récupération des id issus des données BeST,
+</li>
+<li>
+intégration des anciens noms de rue de Charleroi,
+</li>
+<li>
+résolution d’un problème d’attribution de deux secteurs statistiques à
+des mauvais quartiers,
+</li>
+<li>
+une nouvelle fonction pour charger les données et
+</li>
+<li>
+ajout d’un paramètre pour l’élargissement aux communes adjacentes.
+</li>
+</ul>
+<p>
+La <a href="https://phacochr.github.io/phacochr/">version 0.9.1.14</a>
+reste néanmoins disponible.
+</p>
 
 </div>
 

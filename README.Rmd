@@ -23,8 +23,16 @@ knitr::opts_chunk$set(
 `phacochr` est un géocodeur pour la Belgique sous forme de package R. Son principe est de produire, à partir d'une base de données d'adresses, une série d'informations nécessaires pour l'analyse spatiale : les coordonnées X-Y mais également d'autres informations utiles comme le secteur statistique ou le quartier du monitoring pour Bruxelles. Le niveau de précision du géocodage est celui du bâtiment.
 
 <div style="border:0px; background-color:#f8f5e4; padding: 10px; margin-bottom: 10px">
-**Ceci est la version de développement de phacochr.**
-La mise-à-jour de `phacochr` vers la [version 0.10.0.0.](https://phacochr.github.io/phacochrdev/news/index.html) nécessite de réimporter les données avant de pouvoir mettre les données à jours. Pour vous assurez que tout fonctionne réinstaller phacochr depuis le début.
+<p><strong>Ceci est la version de développement de phacochr.</strong></p>
+<p>La <a href="https://phacochr.github.io/phacochrdev/news/index.html">version 0.10.0.0</a> qui nécessite une réinstallation complète présente des changements substantiels:</p>
+<ul>
+  <li>récupération des id issus des données BeST,</li>
+  <li>intégration des anciens noms de rue de Charleroi,</li>
+  <li>résolution d'un problème d'attribution de deux secteurs statistiques à des mauvais quartiers,</li>
+  <li>une nouvelle fonction pour charger les données et</li>
+  <li>ajout d'un paramètre pour l'élargissement aux communes adjacentes.</li>
+</ul>
+<p>La <a href="https://phacochr.github.io/phacochr/">version 0.9.1.14</a> reste néanmoins disponible.</p>
 </div>
 
 Le package est très rapide pour géocoder de longues listes (la vitesse d’exécution se situe entre 0,4 et 0,8 secondes pour 100 adresses sur un ordinateur de puissance moyenne) et le taux de succès pour le géocodage est élevé (médiane de 97%). Voir la page [Performances et fiabilité](https://phacochr.github.io/phacochrdev/articles/performances.html) pour le détail des performances. 
