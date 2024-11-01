@@ -107,16 +107,16 @@ phaco_geocode <-  function(data_to_geocode,
                            mid_street = mid_street,
                            anonymous = anonymous)
 
-  for (i in seq_along(list_arg_logical)) {
-    if(length(list_arg_logical[[i]]) > 1) {
-      cat("\n")
-      stop(paste0("\u2716 ", names(list_arg_logical[i]), " doit etre un vecteur de longueur 1"))
-    }
-    if(!is.logical(list_arg_logical[[i]])) {
-      cat("\n")
-      stop(paste0("\u2716 ", names(list_arg_logical[i]), " doit etre une valeur logique"))
-    }
-  }
+  # for (i in seq_along(list_arg_logical)) {
+  #   if(length(list_arg_logical[[i]]) > 1) {
+  #     cat("\n")
+  #     stop(paste0("\u2716 ", names(list_arg_logical[i]), " doit etre un vecteur de longueur 1"))
+  #   }
+  #   if(!is.logical(list_arg_logical[[i]])) {
+  #     cat("\n")
+  #     stop(paste0("\u2716 ", names(list_arg_logical[i]), " doit etre une valeur logique"))
+  #   }
+  # }
 
   list_arg_num <- list(error_max = error_max,
                        error_max_elag= error_max_elag,
