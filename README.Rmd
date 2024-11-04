@@ -14,7 +14,7 @@ knitr::opts_chunk$set(
 # Pour mettre à jour le site => pkgdown::build_site(examples = F)
 ```
 
-# phacochrdev <img src="man/figures/logo_phacoch-R_1.png" align="right" height = 150/>
+# phacochrdev <img src="man/figures/logo_phacoch-R_dev.png" align="right" height = 150/>
 
 <!-- badges: start -->
 [![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/phacochr/phacochrdev/blob/main/LICENSE)

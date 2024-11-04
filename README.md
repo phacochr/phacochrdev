@@ -1,5 +1,5 @@
 
-# phacochrdev <img src="man/figures/logo_phacoch-R_1.png" align="right" height = 150/>
+# phacochrdev <img src="man/figures/logo_phacoch-R_dev.png" align="right" height = 150/>
 
 <!-- badges: start -->
 

@@ -46,7 +46,7 @@ navbar:
   right:
     - icon: fa-github fa-lg
       text: "github"
-      href: https://github.com/phacochr/
+      href: https://github.com/phacochr/phacochrdev
 
 footer:
   structure:
