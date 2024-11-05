@@ -6,8 +6,8 @@ Date : 1er novembre 2024
 Cette mise-à-jour nécessite de refaire un `phaco_setup_data()` avant de pouvoir faire un `phaco_best_data_update()`. Pour être sûr faites dans l’ordre :
 ```r
 library(devtools)
-devtools::install_github("phacochr/phacochr")
-library(phacochr)
+devtools::install_github("phacochr/phacochrdev")
+library(phacochrdev)
 phaco_setup_data()
 phaco_best_data_update()
 ```

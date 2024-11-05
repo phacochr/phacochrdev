@@ -64,7 +64,7 @@ phaco_data <- function(data=NULL,
 
 # DATA -----
 #  BeST
-  if(data=="rues"){result<- st_read(paste0(path_data,"BeST/belgium_street_abv_PREPROCESSED.csv"))}
+  if(data=="rues"){result<- st_read(paste0(path_data,"BeST/PREPROCESSED/belgium_street_abv_PREPROCESSED.csv"))}
   if(data=="adresses"){
     result <- list.files(path = paste0(path_data,"BeST/PREPROCESSED/"), pattern = "^data_arrond_PREPROCESSED.*\\.csv$", full.names = TRUE) %>%
       map_dfr(read_delim, delim = ";", progress= F#,
