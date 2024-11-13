@@ -1015,11 +1015,12 @@ phaco_geocode <-  function(data_to_geocode,
 
 
 
-    ### ii. Jointure avec les adresses  ------------------------------------------------------------------------------------------------------
+    ## ii. Jointure avec les adresses  ------------------------------------------------------------------------------------------------------
 
     cat(paste0("\n","\u29D7"," Jointure avec les coordonn","\u00e9","es X-Y"))
 
     FULL_GEOCODING <- res %>%
+      ungroup() %>%
       mutate(address_join_geocoding = str_c(num_rue_clean, street_detected, best_postal_code, sep = " ")) %>% # on pourrait simplier en faisant directement la jointure
       left_join(select(openaddress_be, -street_detected, -best_postal_code,-best_street_id), by = "address_join_geocoding") %>%
       #select(-house_number) %>%
@@ -1028,7 +1029,7 @@ phaco_geocode <-  function(data_to_geocode,
     cat(paste0("\r",colourise("\u2714", fg="green")," Jointure avec les coordonn","\u00e9","es X-Y"))
 
 
-    ### iii. Approximation numero -------------------------------------------------------------------------------------------------------------
+    ## iii. Approximation numero -------------------------------------------------------------------------------------------------------------
 
     # Ne s'applique que si approx_num_max > 0
     if (approx_num_max > 0) {
@@ -1058,7 +1059,8 @@ phaco_geocode <-  function(data_to_geocode,
             mutate(min = min(approx_num)) %>%
             filter(min == approx_num) %>%  # selection plus proche
             sample_n(1)%>%
-            select(-best_street_id, -num_rue_clean, -best_postal_code, -street_detected)
+            select(-best_street_id, -num_rue_clean, -best_postal_code, -street_detected) %>%
+            ungroup()
 
 
           # On selectionne ceux qu'on n'a pas trouve en repartant de FULL_GEOCODING_APPROX avec un anti_join sur APPROX_1
@@ -1083,14 +1085,15 @@ phaco_geocode <-  function(data_to_geocode,
               mutate(min = min(approx_num)) %>%
               filter(min == approx_num) %>%  # selection plus proche
               sample_n(1) %>%
-              select(-best_street_id, -num_rue_clean, -best_postal_code, -street_detected)
+              select(-best_street_id, -num_rue_clean, -best_postal_code, -street_detected) %>%
+              ungroup()
 
             #sum(duplicated(APPROX_2$phaco_id_address))
           }
 
           if (nrow(APPROX_2) == 0){
             APPROX_2 <- APPROX_2 %>%
-              select(-phaco_id_address , -num_rue_clean, -street_detected, -best_street_id, -best_postal_code)
+              select(-num_rue_clean, -street_detected, -best_street_id, -best_postal_code)
           }
 
 
@@ -1331,7 +1334,7 @@ phaco_geocode <-  function(data_to_geocode,
   parallel::stopCluster(cl = my.cluster)
 
   cat(paste0("\r",colourise("\u2714", fg="green")," Cr","\u00e9","ation du fichier final et formatage des tables de v","\u00e9","rification"))
-  cat(paste0("\n",colourise("\u2714", fg="green")," G","\u00e9","ocodage termin","\u00e9"))
+  cat(paste0("\n",colourise("\u2714", fg="green")," G","\u00e9","ocodage termin","\u00e9!"))
   cat(paste0("\n",colourise("\u2139", fg= "blue")," Statistiques concernant le g","\u00e9","ocodage:"))
 
   end_time <- Sys.time()
