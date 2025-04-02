@@ -264,6 +264,26 @@ phaco_geocode <-  function(data_to_geocode,
   #colourise("\u2139", fg= "blue") # hugo
 
   # Pour definir la situation de num-rue-code postal
+  # TO-DO : Simplifier + organiser le flow
+  # EXEMPLE :
+  # Situation de base = best case scénario
+  # integrated_postcode <- FALSE
+  # integrated_number <- FALSE
+  # have_number <- TRUE
+  # if ( # No number + integrated postcode
+  #   all(!are_null(colonne_rue_code_postal)) &
+  #   all(are_null(colonne_num_rue, colonne_num_rue_code_postal,colonne_rue, colonne_code_postal, colonne_num))) {
+  #
+  #   if (all(c(colonne_rue_code_postal) %in% names(data_to_geocode))) {
+  #
+  # Change en fct de la situation
+  #     integrated_postcode <- TRUE
+  #     have_number <- FALSE
+  #
+  #     data_to_geocode <- data_to_geocode %>%
+  #       mutate(rue_to_geocode = data_to_geocode[[colonne_rue_code_postal]])
+  #
+  #   }
   if(!is.null(colonne_num) & !is.null(colonne_rue) & !is.null(colonne_code_postal) & is.null(colonne_num_rue) & is.null(colonne_num_rue_code_postal) & is.null(colonne_rue_code_postal)) {
     situation <- "num_rue_postal_s"
     cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : num","\u00e9","ro, rue et code postal s","\u00e9","par","\u00e9","s"))
@@ -501,6 +521,8 @@ phaco_geocode <-  function(data_to_geocode,
 
     # Les corrections a proprement parler
     # NOTE : en faire une fonction, et trouver une syntaxe plus pratique (une boucle ?)
+    # TO-DO : enlever if_else ne garder que des str_replace + appliquer chauqe résultat sur le précédent dans la mémoire
+    # TO-DO : // avec dbplyr + test vitesse
     data_to_geocode <- data_to_geocode %>%
       mutate(rue_recoded_virgule = str_detect(rue_recoded, regex("[,]", ignore_case = TRUE)),
              rue_recoded = ifelse(rue_recoded_virgule == TRUE,
@@ -839,8 +861,9 @@ phaco_geocode <-  function(data_to_geocode,
 
   # /!\ NOTE : la cle de jointure est en minuscule (d'ou les str_to_lower() avant), car stringdist identifie la diff de case comme une diff !
   # /!\ NOTE2 : la jointure cree les colonnes de postal_street, meme si 0 match ! Important pour la suite, notamment le if statement pour la creation de l'objet sf
+  # Changer la parallélisation : split(CP) -> imap -> stringdist(nthreads = n.cores)
   res <- tibble()
-  res<- foreach (i = unique(data_to_geocode$code_postal_to_geocode),
+  res <- foreach (i = unique(data_to_geocode$code_postal_to_geocode),
                  .combine = 'bind_rows',
                  .packages=c("dplyr","fuzzyjoin"))  %dopar% {
 
@@ -1049,9 +1072,9 @@ phaco_geocode <-  function(data_to_geocode,
           inner_join(select(openaddress_be,best_address_id, best_street_id, best_postal_code, house_number_sans_lettre, x_31370, y_31370, cd_sector),
                      by=c("best_street_id","best_postal_code")) %>%
           distinct() %>%
-          filter(num_rue_clean%%2 == house_number_sans_lettre%%2) #  On ne selectionne que les numeros du meme cote
+          filter(num_rue_clean %% 2 == house_number_sans_lettre %% 2) #  On ne selectionne que les numeros du meme cote
 
-        if (nrow(APPROX_1) > 0){
+        if (nrow(APPROX_1) > 0) {
           # On ne retient que le numero avec la distance minimale
           APPROX_1 <- APPROX_1 %>%
             mutate(approx_num = abs(num_rue_clean - house_number_sans_lettre)) %>%
@@ -1068,7 +1091,7 @@ phaco_geocode <-  function(data_to_geocode,
             select(phaco_id_address, street_detected, num_rue_clean, best_street_id,best_postal_code ) %>%
             anti_join(APPROX_1, by= "phaco_id_address")
 
-          if (nrow(APPROX_2) > 0){
+          if (nrow(APPROX_2) > 0) {
 
             APPROX_2 <- APPROX_2 %>%
               # On fait une jointure avec openaddress sur base des noms de rue, cette fois n'importe quel cote de la rue
@@ -1076,7 +1099,7 @@ phaco_geocode <-  function(data_to_geocode,
                          by=c("best_street_id","best_postal_code"))
           }
 
-          if (nrow(APPROX_2) > 0){
+          if (nrow(APPROX_2) > 0) {
             # On ne retient que le numero avec la distance minimale
             APPROX_2 <- APPROX_2 %>%
               distinct() %>%
@@ -1091,7 +1114,7 @@ phaco_geocode <-  function(data_to_geocode,
             #sum(duplicated(APPROX_2$phaco_id_address))
           }
 
-          if (nrow(APPROX_2) == 0){
+          if (nrow(APPROX_2) == 0) {
             APPROX_2 <- APPROX_2 %>%
               select(-num_rue_clean, -street_detected, -best_street_id, -best_postal_code)
           }
@@ -1341,7 +1364,7 @@ phaco_geocode <-  function(data_to_geocode,
 
   tab<-knitr::kable(result$summary[2:nrow(result$summary),c("Region", "n", "Valid rue(%)", "Rue detect.(%valid)", "Approx.(n)", "Elarg.(n)", "Mid.(n)", "Geocode(%valid)", "Geocode(%tot)")],
                     format = "pipe",
-                    align="lrccccccc")
+                    align = "lrccccccc")
   cat("\n",tab, sep="\n" )
 
   cat(paste0("\n",colourise("\u2139", fg= "blue"), " Temps de calcul total : ", round(difftime(end_time, start_time, units = "secs")[[1]], digits = 1), " s"))
