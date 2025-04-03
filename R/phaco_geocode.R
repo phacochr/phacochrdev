@@ -66,7 +66,8 @@ phaco_geocode <-  function(data_to_geocode,
                            mid_street = TRUE,
                            lang_encoded = c("FR", "NL", "DE"),
                            anonymous = FALSE,
-                           path_data = NULL){
+                           path_data = NULL,
+                           parallel = TRUE){
 
 
   start_time <- Sys.time()
@@ -858,15 +859,25 @@ phaco_geocode <-  function(data_to_geocode,
   ## 0. Parametres/fonctions ----------------------------------------------------------------------------------------------------------------
 
   # Parametres pour la parallelisation
+  # default is parallel  but we let the option to the user to choose in case he want to keep some core for other task
+  # Important bc we will parallelize a lot
   chk <- Sys.getenv("_R_CHECK_LIMIT_CORES_", "")
   if (nzchar(chk) && chk == "TRUE") {
     n.cores <- 2L # limite le nombre de coeurs a 2 pour les tests sur CRAN https://stackoverflow.com/questions/50571325/r-cran-check-fail-when-using-parallel-functions
-  } else {
-    if(parallel::detectCores() > 3) {  # on parallelise a n-1 core ssi 3 cores ou plus, sinon 1 core
-      n.cores <- parallel::detectCores() - 1
-    } else {
-      n.cores <- 1
+  } else if (!parallel) { #
+    n.cores <- 1
+  } else {  # either TRUE or numeric > 0
+    if (is.numeric(parallel)) {
+      n.cores <- parallel
     }
+    else if (parallel::detectCores() >= 3) {# parallel is TRUE
+      n.cores <- parallel::detectCores() - 1 # migth be better to have 2 by default
+    }
+  }
+
+
+
+
   }
 
   cat(paste0("\n","-- G","\u00e9","ocodage"))
