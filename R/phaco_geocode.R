@@ -284,58 +284,100 @@ phaco_geocode <-  function(data_to_geocode,
   #       mutate(rue_to_geocode = data_to_geocode[[colonne_rue_code_postal]])
   #
   #   }
-  if(!is.null(colonne_num) & !is.null(colonne_rue) & !is.null(colonne_code_postal) & is.null(colonne_num_rue) & is.null(colonne_num_rue_code_postal) & is.null(colonne_rue_code_postal)) {
+
+  # Check if multiple column are null in one function
+  are_null <- function(...) {
+    args <- list(...)
+    checks <- sapply(args, is.null)
+    return(checks)
+  }
+
+  # This could be a function that return a situation or multiple flags
+  # Pro : you can return early and skip a lot of useless check
+  # function (cols) {
+  # if logic
+  # return (situation) | return (list(integated_number = TRUE))
+  # }
+
+  if (
+    all(!are_null(colonne_num, colonne_rue, colonne_code_postal)) &
+    all(are_null(colonne_num_rue, colonne_num_rue_code_postal, colonne_rue_code_postal))) {
+
     situation <- "num_rue_postal_s"
-    cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : num","\u00e9","ro, rue et code postal s","\u00e9","par","\u00e9","s"))
-    if(
-      sum(c(colonne_num, colonne_rue, colonne_code_postal) %ni% names(data_to_geocode)) > 0
-    ){
+
+    cat(paste0("\n",colourise("\u2139", fg = "blue")," Champs introduits : num","\u00e9","ro, rue et code postal s","\u00e9","par","\u00e9","s"))
+
+    if (!all(c(colonne_num, colonne_rue, colonne_code_postal) %in% names(data_to_geocode))) {
+
       cat("\n")
+
       stop(paste0("\u2716"," Au moins un nom des colonnes indiqu","\u00e9","es n'existe pas"))
     }
 
-  } else if (!is.null(colonne_num_rue) & !is.null(colonne_code_postal) & is.null(colonne_num) & is.null(colonne_rue) & is.null(colonne_num_rue_code_postal) & is.null(colonne_rue_code_postal)) {
+  } else if ( # integrated number
+    all(!are_null(colonne_num_rue, colonne_code_postal)) &
+    all(are_null(colonne_num, colonne_rue, colonne_num_rue_code_postal, colonne_rue_code_postal))) {
+
     situation <- "num_rue_i_postal_s"
+
     cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : num","\u00e9","ro et rue int","\u00e9","gr","\u00e9","s + code postal s","\u00e9","par","\u00e9"))
-    if(
-      sum(c(colonne_num_rue, colonne_code_postal) %ni% names(data_to_geocode)) > 0
-    ){
+
+    if (!all(c(colonne_num_rue, colonne_code_postal) %in% names(data_to_geocode))) {
+
       cat("\n")
+
       stop(paste0("\u2716"," Au moins un nom des colonnes indiqu","\u00e9","es n'existe pas"))
     }
 
-  } else if (!is.null(colonne_num_rue_code_postal) & is.null(colonne_num) & is.null(colonne_rue) & is.null(colonne_code_postal) & is.null(colonne_num_rue) & is.null(colonne_rue_code_postal)) {
+  } else if (# integrated number & postcode
+    all(!are_null(colonne_num_rue_code_postal)) &
+    all(are_null(colonne_num, colonne_rue, colonne_rue_code_postal, colonne_code_postal, colonne_num_rue))) {
+
     situation <- "num_rue_postal_i"
+
     cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : num","\u00e9","ro, rue et code postal int","\u00e9","gr","\u00e9","s"))
-    if(
-      sum(c(colonne_num_rue_code_postal) %ni% names(data_to_geocode)) > 0
-    ){
+
+    if (!all(c(colonne_num_rue_code_postal) %in% names(data_to_geocode))) {
+
       cat("\n")
+
       stop(paste0("\u2716"," Au moins un nom des colonnes indiqu","\u00e9","es n'existe pas"))
     }
 
-  } else if (!is.null(colonne_rue) & !is.null(colonne_code_postal) & is.null(colonne_num) & is.null(colonne_num_rue) & is.null(colonne_num_rue_code_postal) & is.null(colonne_rue_code_postal)) {
+  } else if ( # No number
+    all(!are_null(colonne_rue, colonne_code_postal)) &
+    all(are_null(colonne_num_rue, colonne_num_rue_code_postal, colonne_rue_code_postal, colonne_num))) {
+
     situation <- "no_num_rue_postal_s"
+
     cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : pas de num","\u00e9","ro, rue et code postal s","\u00e9","par","\u00e9","s"))
-    if(
-      sum(c(colonne_rue, colonne_code_postal) %ni% names(data_to_geocode)) > 0
-    ){
+
+    if (!all(c(colonne_rue, colonne_code_postal) %in% names(data_to_geocode))) {
+
       cat("\n")
+
       stop(paste0("\u2716"," Au moins un nom des colonnes indiqu","\u00e9","es n'existe pas"))
     }
 
-  } else if (!is.null(colonne_rue_code_postal) & is.null(colonne_num) & is.null(colonne_rue) & is.null(colonne_code_postal) & is.null(colonne_num_rue) & is.null(colonne_num_rue_code_postal)) {
+  } else if ( # No number + integrated postcode
+    all(!are_null(colonne_rue_code_postal)) &
+    all(are_null(colonne_num_rue, colonne_num_rue_code_postal,colonne_rue, colonne_code_postal, colonne_num))) {
+
     situation <- "no_num_rue_postal_i"
+
     cat(paste0("\n",colourise("\u2139", fg= "blue")," Champs introduits : pas de num","\u00e9","ro, rue et code postal int","\u00e9","gr","\u00e9","s"))
-    if(
-      sum(c(colonne_rue_code_postal) %ni% names(data_to_geocode)) > 0
-    ){
+
+    if (!all(c(colonne_rue_code_postal) %in% names(data_to_geocode))) {
+
       cat("\n")
+
       stop(paste0("\u2716"," Au moins un nom des colonnes indiqu","\u00e9","es n'existe pas"))
     }
 
   } else {
+
     cat("\n")
+
     stop(paste0("\u2716"," les arguments pour les champs de num","\u00e9","ro, rue et/ou code postal ne sont pas correctent remplis"))
   }
 
