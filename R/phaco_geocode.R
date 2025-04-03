@@ -67,7 +67,7 @@ phaco_geocode <-  function(data_to_geocode,
                            lang_encoded = c("FR", "NL", "DE"),
                            anonymous = FALSE,
                            path_data = NULL,
-                           parallel = TRUE){
+                           parallel = TRUE) {
 
 
   start_time <- Sys.time()
@@ -451,14 +451,14 @@ phaco_geocode <-  function(data_to_geocode,
   # NOTE /!\ le code postal doit IMPERATIVEMENT etre la derniere info du champ (souvent le cas) /!\
   if (situation == "num_rue_postal_i" | situation == "no_num_rue_postal_i") {
     data_to_geocode <- data_to_geocode %>%
-      mutate(code_postal_to_geocode = str_extract(rue_to_geocode, regex("([0-9]{4}\\s[\\p{Letter}-' ]+\\z)|([0-9]{4}(|\\s)\\z)", ignore_case = TRUE)),
-             code_postal_to_geocode = str_extract(code_postal_to_geocode, regex("[0-9]{4}", ignore_case = TRUE)))
+      mutate(code_postal_to_geocode = str_extract(rue_to_geocode, regex("([1-9][0-9]{3}\\s[\\p{Letter}-' ]+\\z)|([1-9][0-9]{3}(|\\s)\\z)", ignore_case = TRUE)),
+             code_postal_to_geocode = str_extract(code_postal_to_geocode, regex("[1-9][0-9]{3}", ignore_case = TRUE)))
   }
 
 
   ## 3. Detection des regions/arrondissements en Belgique -------------------------------------------------------------------------------------
   # Cette partie directement apres le code postal pour pouvoir arreter si le code postal n'est pas valide
-  table_postal_arrond <- readr::read_delim(paste0(path_data,"BeST/PREPROCESSED/table_postal_arrond.csv"), delim = ";", progress= F,  col_types = cols(.default = col_character()))
+  table_postal_arrond <- readr::read_delim(paste0(path_data,"BeST/PREPROCESSED/table_postal_arrond.csv"), delim = ";", progress = F,  col_types = cols(.default = col_character()))
 
   data_to_geocode <- data_to_geocode %>%
     left_join(table_postal_arrond, by = c("code_postal_to_geocode" = "postcode"))
@@ -488,7 +488,8 @@ phaco_geocode <-  function(data_to_geocode,
       mutate(num_rue_clean = as.numeric(num_rue_clean)) %>%
       relocate(num_rue_text, .before = code_postal_to_geocode) %>%
       relocate(num_rue_clean, .after = num_rue_text) %>%
-      select(-num_rue_text)}
+      select(-num_rue_text)
+    }
 
   # Dans le cas ou le num de rue est integre
   # NOTE /!\ le numero de rue doit IMPERATIVEMENT etre le premier chiffre du champ (souvent le cas) /!\
@@ -511,13 +512,13 @@ phaco_geocode <-  function(data_to_geocode,
 
   # I. REGEX adresses (corrections) =========================================================================================================
   # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-  if ((situation == "num_rue_i_postal_s"|situation == "num_rue_postal_i"|situation == "no_num_rue_postal_i") & corrections_REGEX == FALSE){
+  if ((situation == "num_rue_i_postal_s" | situation == "num_rue_postal_i" | situation == "no_num_rue_postal_i") & corrections_REGEX == FALSE){
     cat(colourise(paste0("\n","\u2192"," La colonne contenant la rue est m","\u00e9","lang","\u00e9","e avec le num","\u00e9","ro ou le code postal : switch corrections_REGEX = TRUE"), fg="brown"))
     corrections_REGEX <- TRUE
   }
 
   # On cree une nouvelle colonne avec le nom de rue corrige + des colonnes avec TRUE / FALSE pour identifier les familles de changements
-  if (corrections_REGEX == TRUE){
+  if (corrections_REGEX == TRUE) {
 
     cat(paste0("\n","\u29D7"," Correction orthographique des adresses"))
 
@@ -559,8 +560,8 @@ phaco_geocode <-  function(data_to_geocode,
           " "
         ),
 
-        rue_recoded_code_postal =  str_detect(rue_recoded, regex("([0-9]{4}\\s[\\p{Letter}-' ]+\\z)|([0-9]{4}(|\\s)\\z)", ignore_case = TRUE)),
-        rue_recoded = str_replace(rue_recoded, regex("([0-9]{4}\\s[\\p{Letter}-' ]+\\z)|([0-9]{4}(|\\s)\\z)", ignore_case = TRUE), " "),
+        rue_recoded_code_postal =  str_detect(rue_recoded, regex("([1-9][0-9]{3}\\s[\\p{Letter}-' ]+\\z)|([1-9][0-9]{3}(|\\s)\\z)", ignore_case = TRUE)),
+        rue_recoded = str_replace(rue_recoded, regex("([1-9][0-9]{3}\\s[\\p{Letter}-' ]+\\z)|([1-9][0-9]{3}(|\\s)\\z)", ignore_case = TRUE), " "),
         )
     }
 
@@ -569,253 +570,42 @@ phaco_geocode <-  function(data_to_geocode,
     # TO-DO : enlever if_else ne garder que des str_replace + appliquer chauqe résultat sur le précédent dans la mémoire
     # TO-DO : // avec dbplyr + test vitesse
     data_to_geocode <- data_to_geocode %>%
-      mutate(rue_recoded_virgule = str_detect(rue_recoded, regex("[,]", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_virgule == TRUE,
-                                  str_replace_all(rue_recoded, regex("[,]", ignore_case = TRUE), " "),
-                                  rue_recoded),
+      mutate(rue_recoded = recode_street(rue_recoded))
 
-             rue_recoded_deux_points = str_detect(rue_recoded, regex("[:]", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_deux_points == TRUE,
-                                  str_replace_all(rue_recoded, regex("[:]", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_parenthese = str_detect(rue_recoded, regex("[(].+[)]", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_parenthese == TRUE,
-                                  str_replace_all(rue_recoded, regex("[(].+[)]", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_slash = str_detect(rue_recoded, regex("[/]", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_slash == TRUE,
-                                  str_replace_all(rue_recoded, regex("[/]", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded = str_squish(rue_recoded), # On fait ca apres avoir efface les ponctuations, au cas il y a des doubles espaces
-
-             rue_recoded_boite = str_detect(rue_recoded, regex("(^|\\s)(bt(e|[.]|)|bo(i|\u00ee)te|bus)(|\\s)([0-9]+|[a-zA-Z]\\b)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_boite == TRUE,
-                                  str_replace(rue_recoded, regex("(^|\\s)(bt(e|[.]|)|bo(i|\u00ee)te|bus)(|\\s)([0-9]+|[a-zA-Z]\\b)", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_BP_CP = str_detect(rue_recoded, regex("\\s(BP|CP)(|\\s)[0-9]+|^(BP|CP)(|\\s)[0-9]+", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_BP_CP == TRUE,
-                                  str_replace(rue_recoded, regex("\\s(BP|CP)(|\\s)[0-9]+|^(BP|CP)(|\\s)[0-9]+", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_No = str_detect(rue_recoded, regex("n\u00b0|((^|\\s)(num([.]|)|num(\u00e9|e)ro|n(o|)([.]|)|\\sno)(|\\s)[0-9]+)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_No == TRUE,
-                                  str_replace(rue_recoded, regex("n\u00b0|((^|\\s)(num([.]|)|num(\u00e9|e)ro|n(o|)([.]|)|\\sno)(|\\s)[0-9]+)", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_num = str_detect(rue_recoded, regex("((?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |)))([0-9]++)(?!(( |)e |( |)er |( ||i)(\u00e8|e)me |( |)de |(-|)[a-z]{3,}))([^ ,0-9]+))|(([^ ,0-9]+)(?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |))|([a-z]{3,20}))([0-9]++)(?!(( |)e |( ||i)(\u00e8|e)me |( |)de |( |)er )))|(?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |)))([0-9]++)(?!(( |)e |( ||i)(\u00e8|e)me |( |)de |( |)er ))", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_num == TRUE,
-                                  str_replace_all(rue_recoded, regex("((?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |)))([0-9]++)(?!(( |)e |( |)er |( ||i)(\u00e8|e)me |( |)de |(-|)[a-z]{3,}))([^ ,0-9]+))|(([^ ,0-9]+)(?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |))|([a-z]{3,20}))([0-9]++)(?!(( |)e |( ||i)(\u00e8|e)me |( |)de |( |)er )))|(?<!(\\sd(es|u) )|(Albert( |))|(L(e|\u00e9)opold( |))|(Baudouin( |)))([0-9]++)(?!(( |)e |( ||i)(\u00e8|e)me |( |)de |( |)er ))", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_Rez = str_detect(rue_recoded, regex("\\sRez\\s", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Rez == TRUE,
-                                  str_replace(rue_recoded, regex("\\sRez\\s", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_Bis = str_detect(rue_recoded, regex("\\sBis\\s", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Bis == TRUE,
-                                  str_replace(rue_recoded, regex("\\sBis\\s", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_Rdc = str_detect(rue_recoded, regex("\\sRdc\\s", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Rdc == TRUE,
-                                  str_replace(rue_recoded, regex("\\sRdc\\s", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded_Commandant = str_detect(rue_recoded, regex("(c(m|)dt([.]|)(\\s|))", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Commandant == TRUE,
-                                  str_replace(rue_recoded, regex("(c(m|)dt([.]|)(\\s|))", ignore_case = TRUE), "Commandant "),
-                                  rue_recoded),
-
-             rue_recoded_Lieutenant = str_detect(rue_recoded, regex("((^lt[.](\\s|)|^lt\\s)|(?<!^)\\s+lt[.](\\s|)|(?<!^)\\s+lt\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Lieutenant == TRUE,
-                                  str_replace(rue_recoded, regex("(^lt[.](\\s|)|^lt\\s)", ignore_case = TRUE), "Luitenant "),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_Lieutenant == TRUE,
-                                  str_replace(rue_recoded, regex("((?<!^)\\s+lt[.](\\s|)|(?<!^)\\s+lt\\s)", ignore_case = TRUE), " Lieutenant "),
-                                  rue_recoded),
-
-             rue_recoded_Saint = str_detect(rue_recoded, regex("(((\\sst[.][-]))|(\\sst(\\s|[-]|[.]))|((^st[.][-])|(^st(\\s|[-]|[.])))|(\\ss|^s)te(\\s|[-]))", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_Saint == TRUE,
-                                  str_replace(rue_recoded, regex("((\\sst[.][-]))|(\\sst(\\s|[-]|[.]))", ignore_case = TRUE), " Saint "),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_Saint == TRUE,
-                                  str_replace(rue_recoded, regex("((^st[.][-])|(^st(\\s|[-]|[.])))", ignore_case = TRUE), "Sint "),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_Saint == TRUE,
-                                  str_replace(rue_recoded, regex("(\\ss|^s)te(\\s|[-])", ignore_case = TRUE), " Sainte "),
-                                  rue_recoded),
-
-             rue_recoded = str_trim(rue_recoded, "left"), # On fait ca avant les REGEX avec ^ (ci-dessous), au cas ou les etapes precedentes auraient ajoute des blancs au debut des chaines de caracteres (notamment " Saint ", cf. precedent)
-
-             rue_recoded_chaussee = str_detect(rue_recoded, regex("(^ch(s|)(\u00e9|e)e\\s|^ch([.]|\\s))", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_chaussee == TRUE,
-                                  str_replace(rue_recoded, regex("(^ch(s|)(\u00e9|e)e\\s|^ch([.]|\\s))", ignore_case = TRUE), "Chaussee "),
-                                  rue_recoded),
-
-             rue_recoded_avenue = str_detect(rue_recoded, regex("(^av[.](\\s|)|^av(e|)\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_avenue == TRUE,
-                                  str_replace(rue_recoded, regex("(^av[.](\\s|)|^av(e|)\\s)", ignore_case = TRUE), "Avenue "),
-                                  rue_recoded),
-
-             rue_recoded_koning = str_detect(rue_recoded, regex("(^kon[.](\\s|)|^kon\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_koning == TRUE,
-                                  str_replace(rue_recoded, regex("(^kon[.](\\s|)(?=(elisabet|astrid))|^kon\\s)(?=(elisabet|astrid))", ignore_case = TRUE), "Koningin "),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_koning == TRUE,
-                                  str_replace(rue_recoded, regex("(^kon[.](\\s|)(?!(elisabet|astrid))|^kon\\s)(?!(elisabet|astrid))", ignore_case = TRUE), "Koning "),
-                                  rue_recoded),
-
-             rue_recoded_professor = str_detect(rue_recoded, regex("(^prof[.](\\s|)|^prof\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_professor == TRUE,
-                                  str_replace(rue_recoded, regex("(^prof[.](\\s|)|^prof\\s)", ignore_case = TRUE), "Professor "),
-                                  rue_recoded),
-
-             rue_recoded_square = str_detect(rue_recoded, regex("(^sq[.](\\s|)|^sq\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_square == TRUE,
-                                  str_replace(rue_recoded, regex("(^sq[.](\\s|)|^sq\\s)", ignore_case = TRUE), "Square "),
-                                  rue_recoded),
-
-             rue_recoded_steenweg = str_detect(rue_recoded, regex("stwg(\\s|[.])", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_steenweg == TRUE,
-                                  str_replace(rue_recoded, regex("stwg(\\s|[.])", ignore_case = TRUE), "steenweg"),
-                                  rue_recoded),
-
-             rue_recoded_burg = str_detect(rue_recoded, regex("(^burg[.](\\s|)|^burg\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_burg == TRUE,
-                                  str_replace(rue_recoded, regex("(^burg[.](\\s|)|^burg\\s)", ignore_case = TRUE), "Burgemeester "),
-                                  rue_recoded),
-
-             rue_recoded_dokter = str_detect(rue_recoded, regex("(^dr[.](\\s|)|^dr\\s|(?<!^)\\s+dr[.](\\s|)|(?<!^)\\s+dr\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_dokter == TRUE,
-                                  str_replace(rue_recoded, regex("(^dr[.](\\s|)|^dr\\s)", ignore_case = TRUE), "Dokter "),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_dokter == TRUE,
-                                  str_replace(rue_recoded, regex("((?<!^)\\s+dr[.](\\s|)|(?<!^)\\s+dr\\s)", ignore_case = TRUE), " Docteur "),
-                                  rue_recoded),
-
-             rue_recoded_boulevard = str_detect(rue_recoded, regex("((^b(|l)(|v)d(|[.])\\s)|(^b(|l)(|v)d[.]))", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_boulevard == TRUE,
-                                  str_replace(rue_recoded, regex("((^b(|l)(|v)d(|[.])\\s)|(^b(|l)(|v)d[.]))", ignore_case = TRUE), "Boulevard "),
-                                  rue_recoded),
-
-             rue_recoded_route = str_detect(rue_recoded, regex("^Rte\\s", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_route == TRUE,
-                                  str_replace(rue_recoded, regex("^Rte\\s", ignore_case = TRUE), "Route "),
-                                  rue_recoded),
-
-             rue_recoded_place = str_detect(rue_recoded, regex("^pl\\s", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_place == TRUE,
-                                  str_replace(rue_recoded, regex("^pl\\s", ignore_case = TRUE), "Place "),
-                                  rue_recoded),
-
-             # Ici on conditionne la correction au fait qu'il n'y ait pas de mots neerlandais, car correction uniquement francophone
-             rue_recoded_Rue = ifelse(str_detect(rue_recoded, regex("(laan|straat|plein|dreef|lei)", ignore_case = TRUE)),
-                                      FALSE,
-                                      str_detect(rue_recoded, regex("(^de\\sla\\s|^du\\s|^des\\s|^d[']|^de\\s|^r\\s|^de\\sl(\\s|)['])", ignore_case = TRUE))
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^de\\sla\\s", ignore_case = TRUE), "Rue de la "),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^du\\s", ignore_case = TRUE), "Rue du "),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^des\\s", ignore_case = TRUE), "Rue des "),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^d[']", ignore_case = TRUE), "Rue d'"),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^de\\s", ignore_case = TRUE), "Rue de "),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^r\\s", ignore_case = TRUE), "Rue "),
-                                  rue_recoded
-             ),
-             rue_recoded = ifelse(rue_recoded_Rue == TRUE,
-                                  str_replace(rue_recoded, regex("^de\\sl(\\s|)[']", ignore_case = TRUE), "Rue de l'"),
-                                  rue_recoded
-             ),
-
-             rue_recoded_apostrophe = str_detect(rue_recoded, regex("(de\\sl\\s([']|)|rue\\sd\\s|[']\\s)", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
-                                  str_replace(rue_recoded, regex("de\\sl\\s([']|)", ignore_case = TRUE), "de l'"),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
-                                  str_replace(rue_recoded, regex("rue\\sd\\s", ignore_case = TRUE), "Rue d'"),
-                                  rue_recoded),
-             rue_recoded = ifelse(rue_recoded_apostrophe == TRUE,
-                                  str_replace(rue_recoded, regex("[']\\s", ignore_case = TRUE), "'"),
-                                  rue_recoded),
-
-             rue_recoded = str_squish(rue_recoded), # On fait ca avant le regex "(?<=\\s)[A-Za-z]$" (ci-dessous), pour etre sur qu'il fonctionne (car avec un espace derriere la lettre, il n'agit plus)
-
-             rue_recoded_lettre_end = str_detect(rue_recoded, regex("(?<=\\s)[A-Za-z]$", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_lettre_end == TRUE,
-                                  str_replace(rue_recoded, regex("(?<=\\s)[A-Za-z]$", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded = str_squish(rue_recoded), # On fait ca avant le regex "(?<=\\s)[A-Za-z]$" (ci-dessous), pour etre sur qu'il fonctionne (car avec un espace derriere la lettre, il n'agit plus)
-
-             rue_recoded_lettre_end2 = str_detect(rue_recoded, regex("(?<=\\s)[A-Za-z]$", ignore_case = TRUE)), # On le fait 2x, pour les doubles lettres seules a la fin (present dans BDD des pharmaciens)
-             rue_recoded = ifelse(rue_recoded_lettre_end2 == TRUE,
-                                  str_replace(rue_recoded, regex("(?<=\\s)[A-Za-z]$", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded = str_squish(rue_recoded), # On fait ca avant le regex "[-]$" (ci-dessous), pour etre sur qu'il fonctionne (car avec un espace derriere le tiret, il n'agit plus)
-
-             rue_recoded_tiret = str_detect(rue_recoded, regex("([-]$|^[-])", ignore_case = TRUE)),
-             rue_recoded = ifelse(rue_recoded_tiret == TRUE,
-                                  str_replace(rue_recoded, regex("([-]$|^[-])", ignore_case = TRUE), " "),
-                                  rue_recoded),
-
-             rue_recoded = str_squish(rue_recoded) # A faire a la fin : pour les doubles espaces et les espaces en trop a gauche ou a droite
-      )
-
-    data_to_geocode <- data_to_geocode %>%
-      mutate(rue_recoded_commune = ifelse(rue_recoded_commune == TRUE, "commune", NA),
-             rue_recoded_code_postal = ifelse(rue_recoded_code_postal == TRUE, "code postal", NA),
-             rue_recoded_virgule = ifelse(rue_recoded_virgule == TRUE, "virgule", NA),
-             rue_recoded_deux_points = ifelse(rue_recoded_deux_points == TRUE, "deux_points", NA),
-             rue_recoded_parenthese = ifelse(rue_recoded_parenthese == TRUE, "parenthese", NA),
-             rue_recoded_slash = ifelse(rue_recoded_slash == TRUE, "slash", NA),
-             rue_recoded_boite = ifelse(rue_recoded_boite == TRUE, "boite", NA),
-             rue_recoded_BP_CP = ifelse(rue_recoded_BP_CP == TRUE, "BP_CP", NA),
-             rue_recoded_No = ifelse(rue_recoded_No == TRUE, paste0("n", "\u00b0"), NA),
-             rue_recoded_num = ifelse(rue_recoded_num == TRUE, "num", NA),
-             rue_recoded_Rez = ifelse(rue_recoded_Rez == TRUE, "Rez", NA),
-             rue_recoded_Bis = ifelse(rue_recoded_Bis == TRUE, "Bis", NA),
-             rue_recoded_Rdc = ifelse(rue_recoded_Rdc == TRUE, "Rdc", NA),
-             rue_recoded_Commandant = ifelse(rue_recoded_Commandant == TRUE, "Commandant", NA),
-             rue_recoded_Lieutenant = ifelse(rue_recoded_Lieutenant == TRUE, "Lieutenant", NA),
-             rue_recoded_Saint = ifelse(rue_recoded_Saint == TRUE, "Saint", NA),
-             rue_recoded_chaussee = ifelse(rue_recoded_chaussee == TRUE, "chaussee", NA),
-             rue_recoded_avenue = ifelse(rue_recoded_avenue == TRUE, "avenue", NA),
-             rue_recoded_koning = ifelse(rue_recoded_koning == TRUE, "koning", NA),
-             rue_recoded_professor = ifelse(rue_recoded_professor == TRUE, "professor", NA),
-             rue_recoded_square = ifelse(rue_recoded_square == TRUE, "square", NA),
-             rue_recoded_steenweg = ifelse(rue_recoded_steenweg == TRUE, "steenweg", NA),
-             rue_recoded_burg = ifelse(rue_recoded_burg == TRUE, "Burgemeester", NA),
-             rue_recoded_dokter = ifelse(rue_recoded_dokter == TRUE, "Dokter", NA),
-             rue_recoded_boulevard = ifelse(rue_recoded_boulevard == TRUE, "boulevard", NA),
-             rue_recoded_route = ifelse(rue_recoded_route == TRUE, "route", NA),
-             rue_recoded_place = ifelse(rue_recoded_place == TRUE, "place", NA),
-             rue_recoded_Rue = ifelse(rue_recoded_Rue == TRUE, "Rue", NA),
-             rue_recoded_apostrophe = ifelse(rue_recoded_apostrophe == TRUE, "apostrophe", NA),
-             rue_recoded_lettre_end = ifelse(rue_recoded_lettre_end == TRUE, "lettre_fin", NA),
-             rue_recoded_lettre_end2 = ifelse(rue_recoded_lettre_end == TRUE, "lettre_fin2", NA),
-             rue_recoded_tiret = ifelse(rue_recoded_tiret == TRUE, "tiret", NA)
-      )
+    # data_to_geocode <- data_to_geocode %>%
+    #   mutate(rue_recoded_commune = ifelse(rue_recoded_commune == TRUE, "commune", NA),
+    #          rue_recoded_code_postal = ifelse(rue_recoded_code_postal == TRUE, "code postal", NA),
+    #          rue_recoded_virgule = ifelse(rue_recoded_virgule == TRUE, "virgule", NA),
+    #          rue_recoded_deux_points = ifelse(rue_recoded_deux_points == TRUE, "deux_points", NA),
+    #          rue_recoded_parenthese = ifelse(rue_recoded_parenthese == TRUE, "parenthese", NA),
+    #          rue_recoded_slash = ifelse(rue_recoded_slash == TRUE, "slash", NA),
+    #          rue_recoded_boite = ifelse(rue_recoded_boite == TRUE, "boite", NA),
+    #          rue_recoded_BP_CP = ifelse(rue_recoded_BP_CP == TRUE, "BP_CP", NA),
+    #          rue_recoded_No = ifelse(rue_recoded_No == TRUE, paste0("n", "\u00b0"), NA),
+    #          rue_recoded_num = ifelse(rue_recoded_num == TRUE, "num", NA),
+    #          rue_recoded_Rez = ifelse(rue_recoded_Rez == TRUE, "Rez", NA),
+    #          rue_recoded_Bis = ifelse(rue_recoded_Bis == TRUE, "Bis", NA),
+    #          rue_recoded_Rdc = ifelse(rue_recoded_Rdc == TRUE, "Rdc", NA),
+    #          rue_recoded_Commandant = ifelse(rue_recoded_Commandant == TRUE, "Commandant", NA),
+    #          rue_recoded_Lieutenant = ifelse(rue_recoded_Lieutenant == TRUE, "Lieutenant", NA),
+    #          rue_recoded_Saint = ifelse(rue_recoded_Saint == TRUE, "Saint", NA),
+    #          rue_recoded_chaussee = ifelse(rue_recoded_chaussee == TRUE, "chaussee", NA),
+    #          rue_recoded_avenue = ifelse(rue_recoded_avenue == TRUE, "avenue", NA),
+    #          rue_recoded_koning = ifelse(rue_recoded_koning == TRUE, "koning", NA),
+    #          rue_recoded_professor = ifelse(rue_recoded_professor == TRUE, "professor", NA),
+    #          rue_recoded_square = ifelse(rue_recoded_square == TRUE, "square", NA),
+    #          rue_recoded_steenweg = ifelse(rue_recoded_steenweg == TRUE, "steenweg", NA),
+    #          rue_recoded_burg = ifelse(rue_recoded_burg == TRUE, "Burgemeester", NA),
+    #          rue_recoded_dokter = ifelse(rue_recoded_dokter == TRUE, "Dokter", NA),
+    #          rue_recoded_boulevard = ifelse(rue_recoded_boulevard == TRUE, "boulevard", NA),
+    #          rue_recoded_route = ifelse(rue_recoded_route == TRUE, "route", NA),
+    #          rue_recoded_place = ifelse(rue_recoded_place == TRUE, "place", NA),
+    #          rue_recoded_Rue = ifelse(rue_recoded_Rue == TRUE, "Rue", NA),
+    #          rue_recoded_apostrophe = ifelse(rue_recoded_apostrophe == TRUE, "apostrophe", NA),
+    #          rue_recoded_lettre_end = ifelse(rue_recoded_lettre_end == TRUE, "lettre_fin", NA),
+    #          rue_recoded_lettre_end2 = ifelse(rue_recoded_lettre_end == TRUE, "lettre_fin2", NA),
+    #          rue_recoded_tiret = ifelse(rue_recoded_tiret == TRUE, "tiret", NA)
+    #   )
 
     # Au cas ou la rue serait un espace vide (certains cas possibles) => NA
     data_to_geocode$rue_recoded[data_to_geocode$rue_recoded == ""] <- NA
@@ -870,14 +660,9 @@ phaco_geocode <-  function(data_to_geocode,
     if (is.numeric(parallel)) {
       n.cores <- parallel
     }
-    else if (parallel::detectCores() >= 3) {# parallel is TRUE
-      n.cores <- parallel::detectCores() - 1 # migth be better to have 2 by default
+    else if (parallel::detectCores() >= 4) {# parallel is TRUE
+      n.cores <- parallel::detectCores() - 2 # migth be better to have 2 by default
     }
-  }
-
-
-
-
   }
 
   cat(paste0("\n","-- G","\u00e9","ocodage"))
@@ -917,34 +702,25 @@ phaco_geocode <-  function(data_to_geocode,
   # /!\ NOTE : la cle de jointure est en minuscule (d'ou les str_to_lower() avant), car stringdist identifie la diff de case comme une diff !
   # /!\ NOTE2 : la jointure cree les colonnes de postal_street, meme si 0 match ! Important pour la suite, notamment le if statement pour la creation de l'objet sf
   # Changer la parallélisation : split(CP) -> imap -> stringdist(nthreads = n.cores)
-  res <- tibble()
-  res <- foreach (i = unique(data_to_geocode$code_postal_to_geocode),
-                 .combine = 'bind_rows',
-                 .packages=c("dplyr","fuzzyjoin"))  %dopar% {
+  res <- data_to_geocode |>
+    split(~code_postal_to_geocode) |>
+    purrr::imap(\(data_to_geocode, post_code) {
+      stringdist_left_join(data_to_geocode,
+                           postal_street |> filter(best_postal_code == post_code),
+                           by = c("address_join" = "address_join_street"),
+                           method = method_stringdist,
+                           max_dist = error_max,
+                           distance_col = "dist_fuzzy",
+                           nthread = n.cores)}) |>
+    bind_rows() |>
+    group_by(phaco_id_address) |>
+    mutate(min = min(dist_fuzzy)) |>
+    filter(dist_fuzzy == min | is.na(dist_fuzzy)) |> # On ne retient que l'adresse detectee avec la distance minimale
+    select(-min)
 
-                   data_to_geocode_i <- data_to_geocode %>%
-                     filter(code_postal_to_geocode == i)
-
-                   postal_street_i <- postal_street %>%
-                     filter(best_postal_code == i)
-
-                   stringdist_left_join(data_to_geocode_i,
-                                        postal_street_i,
-                                        by = c("address_join" = "address_join_street"),
-                                        method = method_stringdist,
-                                        max_dist = error_max,
-                                        distance_col = "dist_fuzzy",
-                                        nthread= n.cores)
-                 }
+  print(res)
 
   cat(paste0("\r",colourise("\u2714", fg="green")," D","\u00e9","tection des rues (matching inexact avec fuzzyjoin)", "\033[K"))
-
-  # On ne retient que l'adresse detectee avec la distance minimale
-  res <- res %>%
-    group_by(phaco_id_address) %>%
-    mutate(min = min(dist_fuzzy)) %>%
-    filter(dist_fuzzy == min | is.na(dist_fuzzy)) %>%
-    select(-min)
 
   # Au cas ou il reste des doublons : nouveau calcul de distance Jaro-Winkler dans un if statement + au cas ou il reste ENCORE des doublons : tirage aleatoire (arrive uniquement lorsque la tolerance est elevee)
   # Si ca ne se lance pas, on supprime les cles de jointure dont on n'a plus besoin
@@ -958,7 +734,7 @@ phaco_geocode <-  function(data_to_geocode,
     cat(paste0("\n","\u29D7"," Ex-aequos : calcul de la distance Jaro-Winkler pour d","\u00e9","partager"))
 
     res <- res %>%
-      mutate(distance_jw = stringdist(address_join, address_join_street, method = "jw", p=0.1, nthread= n.cores)) %>% # Au cas ou il reste des doublons : nouveau calcul de distance Jaro-Winkler
+      mutate(distance_jw = stringdist(address_join, address_join_street, method = "jw", p = 0.1, nthread = n.cores)) |>  # Au cas ou il reste des doublons : nouveau calcul de distance Jaro-Winkler
       group_by(phaco_id_address) %>%
       mutate(min_jw = min(distance_jw)) %>%
       filter(distance_jw == min_jw | is.na(distance_jw)) %>%
@@ -1002,29 +778,23 @@ phaco_geocode <-  function(data_to_geocode,
       # On charge la table des communes (= code INS recodes) adjacentes par commune (voir preprocessing)
       table_commune_adjacentes <- readr::read_delim(paste0(path_data,"BeST/PREPROCESSED/table_commune_adjacentes.csv"), progress= F, delim = ";", col_types = cols(.default = col_character()))
 
-      res_adj <- tibble()
-      res_adj <- foreach (i = unique(ADDRESS_last_tentative$`Refnis code`),
-                          .combine = 'bind_rows',
-                          .packages=c("dplyr","fuzzyjoin"))  %dopar% {
+      print(ADDRESS_last_tentative)
 
-                            # On calcule un vecteur reprenant les communes adjacentes par commune i
-                            com_adj_i <- table_commune_adjacentes$cd_munty_refnis_voisin[table_commune_adjacentes$cd_munty_refnis == i]
+      res_adj <- ADDRESS_last_tentative |>
+        split(~`Refnis code`) |>
+        purrr::imap(\(data_to_geocode, refnis) {
+          data_to_geocode |>
+            select(- `Refnis code`, - best_postal_code) |>
+          stringdist_left_join(postal_street_adj |>
+                                 filter(`Refnis code` %in% c(refnis, table_commune_adjacentes |> filter(cd_munty_refnis == refnis) |> pull(cd_munty_refnis))) |>  # On inclut i dans c(i, com_adj_i) car le code postal est plus petit que i
+                                 select(-`Refnis code`),
+                               by = c("address_join" = "address_join_street"),
+                               method = method_stringdist,
+                               max_dist = error_max,
+                               distance_col = "dist_fuzzy",
+                               nthread = n.cores)}) |>
+        bind_rows()
 
-                            ADDRESS_last_tentative_i <- ADDRESS_last_tentative %>%
-                              filter(`Refnis code` %in% i) %>%
-                              select(-`Refnis code`, -best_postal_code)
-
-                            postal_street_adj_i <- postal_street_adj %>%
-                              filter(`Refnis code` %in% c(i, com_adj_i)) %>% # On inclut i dans c(i, com_adj_i) car le code postal est plus petit que i
-                              select(-`Refnis code`)
-
-                            stringdist_left_join(ADDRESS_last_tentative_i,
-                                                 postal_street_adj_i,
-                                                 by = c("address_join" = "address_join_street"),
-                                                 method = method_stringdist,
-                                                 max_dist = error_max_elag,
-                                                 distance_col = "dist_fuzzy")
-                          }
 
       # Ce if statement car res_adj peut avoir 0 observations => NOTE : elucider pourquoi ? Pourquoi ca n'arrive pas avec "res" (boucle precedente) ?
       if(nrow(res_adj) > 0){
