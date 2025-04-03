@@ -344,6 +344,8 @@ phaco_geocode <-  function(data_to_geocode,
     mutate(phaco_id_address = row_number()) %>%
     relocate(phaco_id_address)
 
+  # TO-DO : select column to geo code + id -> at the end join back with user df
+  # Only var to be unique are from the output
   # Creation/formatage des colonnes pour le geocodage
 
   # Rue et num (si separe) : le principe est de creer la colonne rue_to_geocode pour qu'elle contienne le nom de la rue => dans le cas ou elle contient aussi le num ou le code postal, c'est separe dans la suite
